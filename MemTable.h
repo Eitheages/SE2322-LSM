@@ -16,9 +16,9 @@ class SkipList {
         Key _key;
         Val _val;
         SkipListNode *pre, *next, *above, *below;
-        SkipListNode(Key k = 0, Val v = VAL_INVALID, SkipListNode *p1 = nullptr,
-                     SkipListNode *p2 = nullptr, SkipListNode *p3 = nullptr,
-                     SkipListNode *p4 = nullptr)
+        SkipListNode(const Key &k = 0, const Val &v = VAL_INVALID,
+                     SkipListNode *p1 = nullptr, SkipListNode *p2 = nullptr,
+                     SkipListNode *p3 = nullptr, SkipListNode *p4 = nullptr)
             : _key(k), _val(v), pre(p1), next(p2), above(p3), below(p4) {}
     } Node;
 
@@ -42,7 +42,7 @@ public:
         return SkipList::randLevel(BOUND, MAX_LEVEL);
     }
 
-    Val search(const Key& key) const {
+    Val search(const Key &key) const {
         Node *p;
         if (searchUtil(key, &p)) {
             return p->_val;
@@ -50,7 +50,7 @@ public:
         return VAL_INVALID;
     }
 
-    bool insert(const Key& key, const Val& val, bool update = true) {
+    bool insert(const Key &key, const Val &val, bool update = true) {
         /* Never insert VAL_INVALID */
         if (val == VAL_INVALID)
             return false;
@@ -80,9 +80,9 @@ private:
     std::vector<Node *> tail;
     int h;
 
-    bool searchUtil(const Key& key, Node **p) const;
+    bool searchUtil(const Key &key, Node **p) const;
 
-    void insertUntil(const Key &key, const Val &val, Node* t);
+    void insertUntil(const Key &key, const Val &val, Node *t);
 };
 
 class MemTable {
@@ -91,7 +91,8 @@ public:
      * @param mem_max The max memory of SSTabel
      * @param x The reciprocal of possibility, used in skip list
      */
-    MemTable(int mem_max = 2, int x = 4) : MEM_MAX(mem_max), sl(new SkipList(4)) {}
+    MemTable(int mem_max = MAX_MEMORY, int p = 4)
+        : MEM_MAX(mem_max), sl(new SkipList(p)) {}
 
     void put(Key k, Val v) {
         if (!available(k, v)) {
@@ -110,7 +111,7 @@ public:
      * @return true: it's found, parameter v is set as the value
      * @return false: there are no key in memory table, v isn't defined
      */
-    bool get(Key k, Val* v) {
+    bool get(Key k, Val *v) {
         SkipList::Node *p;
         if (sl->searchUtil(k, &p)) {
             *v = p->_val;
@@ -127,7 +128,7 @@ protected:
      *         false: the key not exists in the memory table
      *                p is set to the previous
      */
-    bool removeTry(Key k, SkipList::Node** p) {
+    bool removeTry(Key k, SkipList::Node **p) {
         // if (!sl->searchUtil(k, p))
         //     return false;
         // SkipList::Node* tmp;
@@ -140,14 +141,14 @@ protected:
         return true;
     }
 
-    bool remove(SkipList::Node* p) {
+    bool remove(SkipList::Node *p) {
         return true;
     }
 
 private:
     const int MEM_MAX;
     SkipList *sl;
-    int mem; // always <= MAX_MEMORY
+    int mem;  // always <= MAX_MEMORY
 
     /**
      * @brief Check whether there is enough space
