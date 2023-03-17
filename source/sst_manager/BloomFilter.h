@@ -9,6 +9,7 @@
  * @copyright Copyright (c) 2023, All Rights Reserved.
  *
  */
+#define __BLOOM_VERSION__ 2
 #if defined(__BLOOM_VERSION__) && !defined(__BLOOM_FILTER__)
 
 #define __BLOOM_FILTER__
@@ -16,9 +17,11 @@
 #include <fstream>
 #include <vector>
 #include "MurmurHash3.h"
-#include "types.h"
+/* For debugging */
+#ifndef MAX_SIZE
 #define MAX_SIZE (10240 * 8) // 10 KB
 // #define MAX_SIZE (128)  // test
+#endif
 
 #if (__BLOOM_VERSION__ == 1)
 typedef std::vector<bool> Bitset;
