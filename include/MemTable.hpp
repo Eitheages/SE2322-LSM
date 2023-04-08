@@ -1,9 +1,11 @@
 #ifndef MEMTABLE
 #define MEMTABLE
 
+#define NDEBUG
 #include <cassert>
 #include <string>
 #include <vector>
+#include <memory>
 #include "types.h"
 
 namespace mtb {
@@ -13,7 +15,7 @@ class MemTable;
 class SkipList {
     friend class MemTable;
     struct SkipListNode;
-    typedef struct SkipListNode Node;
+    using Node = struct SkipListNode;
 
 public:
     SkipList(int pr = 2, int l = INT_MAX, bool e = false);
@@ -51,25 +53,25 @@ private:
     void insertUntil(const Key &key, const Val &val, Node *t);
 };
 
-// class MemTable {
-// public:
-//     /**
-//      * @param mem_max The max memory of SSTabel
-//      * @param x The reciprocal of possibility, used in skip list
-//      */
-//     MemTable(int mem_max = MAX_MEMORY, int p = 4)
-//         : MEM_MAX(mem_max), sl(new SkipList(p)) {}
+class MemTable {
+public:
+    /**
+     * @param mem_max The max memory of SSTabel
+     * @param x The reciprocal of possibility, used in skip list
+     */
+    MemTable(int mem_max = MAX_MEMORY, int x = 4)
+        : MEM_MAX{mem_max}, sl{new SkipList(x)}, mem{BLOOM_FILTER_SIZE} {}
 
-//     void put(Key k, Val v) {
-//         if (!available(k, v)) {
-//             toSST();
-//         }
-//         sl->insert(k, v, true);
-//         /**
-//          * @todo update memory size
-//          *
-//          */
-//     }
+    void put(Key k, Val v) {
+        if (!available(k, v)) {
+            toSST();
+        }
+        sl->insert(k, v, true);
+        /**
+         * @todo update memory size
+         *
+         */
+    }
 
 //     /**
 //      * @brief Search if there are key in the memory table
@@ -111,32 +113,27 @@ private:
 //         return true;
 //     }
 
-// private:
-//     const int MEM_MAX;
-//     SkipList *sl;
-//     int mem;  // always <= MAX_MEMORY
+private:
+    decltype(MAX_MEMORY) MEM_MAX;
+    std::unique_ptr<SkipList> sl;
+    std::remove_const_t<decltype(MAX_MEMORY)> mem;  // always <= MAX_MEMORY
 
-//     /**
-//      * @brief Check whether there is enough space
-//      *        **after** put (k, v)
-//      */
-//     bool available(Key k, Val v) const {
-//         /**
-//          * @todo
-//          */
-//         return true;
-//     }
+    /**
+     * @brief Check whether there is enough space
+     *        **after** put (k, v)
+     */
+    bool available(Key k, Val /* aka std::string */ v) const {
+        if (mem + sizeof(k) * 8 + v.length() * 8 <= MEM_MAX)
+            return true;
+        return false;
+    }
 
-//     void toSST() {
-//         /**
-//          * @todo
-//          *
-//          */
-//         int p = sl->POSSIBILITY;
-//         delete sl;
-//         sl = new SkipList(p);
-//     }
-// };
+    void toSST() {
+        // TODO
+        auto p = sl->POSSIBILITY;
+        sl.reset(new SkipList(p));
+    }
+};
 
 }  // namespace mtb
 

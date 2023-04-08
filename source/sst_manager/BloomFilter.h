@@ -75,7 +75,7 @@ static uint32_t __hash[4];
 
 #endif  // check __BLOOM_VERSION__
 
-template <std::size_t N>
+template <std::size_t N = 1024>
 class BitBuffer {
     static_assert((N & 07) == 0,
                   "Template parameter N of BitBuffer must be a multiple of 8!");
@@ -110,7 +110,7 @@ private:
     std::vector<Byte> _buffer;
     /**
      * @attention This function should be used very carefully
-     *                  since it emits most of the checks.
+     *                  since it omits most of the checks.
      */
     void read_from(std::istream &is) noexcept {
         // _buffer.assign(_buffer.size(), 0);

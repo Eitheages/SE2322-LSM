@@ -1,4 +1,4 @@
-#include "../include/MemTable.h"
+#include "../include/MemTable.hpp"
 
 // #define PRINT
 #define NDEBUG
@@ -90,7 +90,7 @@ void SkipList::insertUntil(const Key &key, const Val &val, Node *t) {
     }
 }
 
-bool SkipList::insert(const Key &key, const Val &val, bool merge/*  = true */) {
+bool SkipList::insert(const Key &key, const Val &val, bool merge/* = true */) {
     /* Never insert VAL_INVALID */
     if (val == VAL_INVALID)
         return false;
