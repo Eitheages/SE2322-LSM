@@ -1,9 +1,20 @@
+/**
+ * @file BloomFilter.hpp
+ * @author BojunRen (albert.cauchy725@gmail.com)
+ * @brief Define a serializable DS bloom filter.
+ * @date 2023-05-14
+ *
+ * @copyright Copyright (c) 2023, All Rights Reserved.
+ *
+ */
 #ifndef BLF_CLASS
 #define BLF_CLASS
 
 #include <array>
-#include <cstddef>
+#include <istream>
+#include <ostream>
 #include "MurmurHash3.h"
+#include "basic.hpp"
 
 #ifndef NDEBUG
 #include <type_traits>
@@ -11,21 +22,19 @@
 
 namespace basic_ds {
 
-using IndexT = std::size_t;
-constexpr IndexT BLF_SIZE = 10240;
-
-template <typename Key = uint64_t, IndexT N = BLF_SIZE, typename CharT = char>
+// Fixed size bloom filter. By default, it can be written into a binary file and occupy 10 KB.
+template <size_type _Size = BLF_SIZE, typename Key = uint64_t, typename CharT = char>
 class BloomFilter {
 public:
-    BloomFilter() : table{} {}
+    explicit BloomFilter() : table{}, hash_buf{} {}
     ~BloomFilter() = default;
 
     void insert(Key k) noexcept {
         getHash(k);
         for (auto x : hash_buf) {
-            IndexT idx = x / sizeof(CharT);
-            int offset = x % sizeof(CharT);
-            table[idx] |= 1u << offset;
+            size_type idx = x / (sizeof(CharT) * 8);
+            int offset = x % (sizeof(CharT) * 8);
+            table[idx] |= (1u << offset);
         }
     }
 
@@ -33,15 +42,38 @@ public:
         getHash(k);
         bool f = true;
         for (auto x : hash_buf) {
-            IndexT idx = x / sizeof(CharT);
-            int offset = x % sizeof(CharT);
+            size_type idx = x / (sizeof(CharT) * 8);
+            int offset = x % (sizeof(CharT) * 8);
             f &= table[idx] >> offset;
         }
         return f;
     }
 
+    constexpr size_type byte_size() const noexcept {
+        return _Size;
+    }
+
 private:
-    std::array<CharT, BLF_SIZE> table;
+    // The std-like stream operator overloads.
+    template <typename Traits>
+    friend std::basic_ostream<char, Traits> &operator<<(
+        std::basic_ostream<char, Traits> &os, const BloomFilter &bft) {
+        os.write(bft.table.data(), _Size);
+        return os;
+    }
+
+    template <class Traits>
+    friend std::basic_istream<char, Traits> &operator>>(
+        std::basic_istream<char, Traits> &is, BloomFilter &bft) {
+        is.read(bft.table.data(), _Size);
+        return is;
+    }
+
+    // `std::array::data()` ensures:
+    // The pointer is such that range [data(); data()+size()) is always a valid range.
+    std::array<CharT, _Size> table;
+
+    // Designed by the given hash function.
     std::array<uint32_t, 4> hash_buf;
 
     void getHash(Key k) noexcept {
@@ -52,10 +84,11 @@ private:
 #endif
         MurmurHash3_x64_128(&k, sizeof(k), 1, hash_buf.data());
         for (auto &x : hash_buf) {
-            x %= BLF_SIZE * sizeof(CharT);
+            x %= _Size * sizeof(CharT) * 8;  // 1 byte = 8 bits
         }
     }
 };
+
 }  // namespace basic_ds
 
 #endif
