@@ -26,7 +26,7 @@ namespace basic_ds {
 template <size_type _Size = BLF_SIZE, typename Key = uint64_t, typename CharT = char>
 class BloomFilter {
 public:
-    explicit BloomFilter() : table{}, hash_buf{} {}
+    explicit BloomFilter() : table{} {}
     ~BloomFilter() = default;
 
     void insert(Key k) noexcept {
@@ -38,7 +38,7 @@ public:
         }
     }
 
-    bool contains(Key k) noexcept {
+    bool contains(Key k) const noexcept {
         getHash(k);
         bool f = true;
         for (auto x : hash_buf) {
@@ -74,9 +74,9 @@ private:
     std::array<CharT, _Size> table;
 
     // Designed by the given hash function.
-    std::array<uint32_t, 4> hash_buf;
+    static std::array<uint32_t, 4> hash_buf;
 
-    void getHash(Key k) noexcept {
+    void getHash(Key k) const noexcept {
 #ifndef NDEBUG
         static_assert(
             std::is_same<Key, uint64_t>::value,
@@ -88,6 +88,9 @@ private:
         }
     }
 };
+
+template <size_type _Size, typename Key, typename CharT>
+std::array<uint32_t, 4> BloomFilter<_Size, Key, CharT>::hash_buf{};
 
 }  // namespace basic_ds
 
