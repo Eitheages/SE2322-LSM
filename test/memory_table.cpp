@@ -29,12 +29,23 @@ int main() {
         }
         return 1;
     }
+    TestEqual(50, mtb.size());
     mtb.put(2, "8"s);
     TestEqual(expect_size, mtb.byte_size());
     mtb.put(2, "11"s);
+    TestEqual(50, mtb.size());
     expect_size += 1;
     TestEqual(expect_size, mtb.byte_size());
     mtb.put(2, "~DELETED~"s);
     expect_size += 7;
     TestEqual(expect_size, mtb.byte_size());
+    mtb.put(3, "~DELETED~"s);
+    TestEqual(51, mtb.size());
+
+    mtb.to_binary("test_read.sst");
+
+    mtb::sst_reader<> sr{"test_read.sst"};
+    TestEqual(1, sr.time_stamp);
+    TestEqual(51, sr.count);
+    TestEqual("~DELETED~"s, sr.read_from_offset(sr.indices[2].second));
 }

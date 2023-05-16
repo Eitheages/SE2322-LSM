@@ -29,6 +29,8 @@ class SkipList {
     using Node = struct SkipListNode;
 
 public:
+    using kv_type = std::pair<KeyT, ValT>;
+
     explicit SkipList() : h{0} {
         std::srand(std::time(nullptr));
         head.emplace_back(new Node(MIN_KEY, ValT{}));
@@ -53,11 +55,11 @@ public:
         Node *t;
         if (this->searchUtil(key, &t)) {
             assert(t->key == key);
-            return std::make_pair(t, false);
+            return {t, false};
         }
         assert(t->key < key || (key == MIN_KEY && t == head[0]));
         this->insertUntil(key, val, t);
-        return std::make_pair(t->_next, true);
+        return {t->_next, true};
     }
 
     // Returns: a pair consisting of: the node inserted or updated,
@@ -83,7 +85,7 @@ public:
         // }
         assert(t->key < key || (key == MIN_KEY && t == head[0]));
         this->insertUntil(key, val, t);
-        return std::make_pair(t->_next, true);
+        return {t->_next, true};
     }
 
     // Returns: the target node if found, otherwise null.
@@ -93,6 +95,17 @@ public:
             return p;
         }
         return nullptr;
+    }
+
+    std::vector<kv_type> get_kv() const noexcept {
+        std::vector<kv_type> res{};
+        Node* p = head[0]->_next;
+        Node* sentinel = tail[0];
+        while (p != sentinel) {
+            res.emplace_back(std::make_pair(p->key, p->val));
+            p = p->_next;
+        }
+        return res;
     }
 
 private:

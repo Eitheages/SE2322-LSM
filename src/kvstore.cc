@@ -10,7 +10,7 @@
 #include "../include/kvstore.h"
 #include <string>
 
-KVStore::KVStore(const std::string &dir) : KVStoreAPI(dir) {}
+KVStore::KVStore(const std::string &dir) : KVStoreAPI(dir), data_dir(dir) {}
 
 KVStore::~KVStore() {}
 

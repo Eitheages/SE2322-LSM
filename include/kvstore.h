@@ -2,11 +2,17 @@
 
 #include "kvstore_api.h"
 
+#include "MemTable.hpp"
+
 class KVStore : public KVStoreAPI {
     // You can add your implementation here
 private:
+    const std::string data_dir;
+    mtb::MemTable<> mtb;
+
 public:
     KVStore(const std::string &dir);
+    KVStore() = delete;
 
     ~KVStore();
 

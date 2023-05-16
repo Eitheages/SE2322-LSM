@@ -1,6 +1,10 @@
 #include <map>
 #include "../include/SkipList.hpp"
 
+#define TestEqual(expect, real) \
+    if ((expect) != (real))     \
+    return 1
+
 int main() {
     basic_ds::SkipList<uint64_t, uint64_t> sl;
     std::map<uint64_t, uint64_t> mp;
@@ -9,6 +13,9 @@ int main() {
         mp.insert(std::make_pair(i, i * i));
         sl.insert(i, i * i);
     }
+
+    auto kv_list = sl.get_kv();
+    TestEqual(50, kv_list.size());
 
     for (int i = 0; i < 100; ++i) {
         const auto it = mp.find(i);
@@ -27,9 +34,12 @@ int main() {
             return 1;
         }
     }
+    kv_list = sl.get_kv();
+    TestEqual(100, kv_list.size());
+
     // odd: i * i, even: i
     for (int i = 0; i < 100; ++i) {
-        if (sl.find(i)->val != (i % 2 == 0 ? i : i * i)) {
+        if (sl.find(i)->val != (i % 2 == 0 ? i : i * i) || sl.find(i)->val != kv_list[i].second) {
             return 1;
         }
     }
