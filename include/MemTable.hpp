@@ -4,30 +4,25 @@
 #include <fstream>
 #include "BloomFilter.hpp"
 #include "SkipList.hpp"
+#include "types.hpp"
 
 namespace mtb {
 
-// This template is only for value type std::string.
-template <typename _Key = LSM_KeyType>
+using namespace std::string_literals;
+// Only for value_type = std::string
 class MemTable {
 public:
-    using key_type = _Key;
-    using val_type = LSM_ValType;
-    using size_type = basic_ds::size_type;
+    using key_type = lsm::key_type;
+    using val_type = lsm::value_type;
+    using size_type = lsm::size_type;
     using kv_type = std::pair<key_type, val_type>;
-
+    using offset_type = lsm::offset_type;
 
     explicit MemTable()
-        : _time_stamp(1),
-          _count(0),
-          _range{1, 0},
-          _byte(HEADER_SIZE + basic_ds::BLF_SIZE) {}
+        : _time_stamp(1), _count(0), _range{1, 0}, _byte(HEADER_SIZE + lsm::BLF_SIZE) {}
 
     explicit MemTable(uint64_t ts)
-        : _time_stamp(ts),
-          _count(0),
-          _range{1, 0},
-          _byte(HEADER_SIZE + basic_ds::BLF_SIZE) {}
+        : _time_stamp(ts), _count(0), _range{1, 0}, _byte(HEADER_SIZE + lsm::BLF_SIZE) {}
 
     ~MemTable() = default;  // TODO
 
@@ -53,7 +48,7 @@ public:
         // The below implements are value_type-dependent
 
         // Write the index table
-        offset_type offset = HEADER_SIZE + basic_ds::BLF_SIZE +
+        offset_type offset = HEADER_SIZE + lsm::BLF_SIZE +
                              this->_count * (sizeof(key_type) + sizeof(offset_type));
         for (kv_type &kv : kv_list) {
             bin_out.write(reinterpret_cast<const char *>(&kv.first), sizeof(key_type))
@@ -108,10 +103,10 @@ public:
     size_type predict_byte_size(const key_type &key, const val_type &val) const noexcept {
         auto get_result = this->get(key);
         if (!get_result.second) {
-            return this->_byte + MemTable<key_type>::predict_insert_size(key, val);
+            return this->_byte + MemTable::predict_insert_size(key, val);
         }
         return this->_byte +
-               MemTable<key_type>::predict_update_size(key, val, get_result.first);
+               MemTable::predict_update_size(key, val, get_result.first);
     }
 
     bool in_range(const key_type &key) const noexcept {
@@ -143,7 +138,6 @@ public:
     }
 
 private:
-    using offset_type = uint32_t;
     static const val_type DeleteNote; /* ~DELETE~ */
     static constexpr size_type HEADER_SIZE = 32;
 
@@ -156,8 +150,8 @@ private:
     size_type _byte;
 
     /** Basic data structure */
-    basic_ds::SkipList<key_type, val_type> dst;               // dynamic search table
-    basic_ds::BloomFilter<basic_ds::BLF_SIZE, key_type> bft;  // bloom filter
+    basic_ds::SkipList<key_type, val_type> dst;  // dynamic search table
+    basic_ds::BloomFilter<lsm::BLF_SIZE> bft;    // bloom filter
 
     inline static size_type predict_insert_size(const key_type &key,
                                                 const val_type &val) noexcept {
@@ -170,68 +164,8 @@ private:
         return (val.length() - pre_val.length()) * sizeof(char);
     }
 };
-
-template <typename _Key>
-const LSM_ValType MemTable<_Key>::DeleteNote = "~DELETED~"s;
-
-template <typename _Key>
-constexpr typename MemTable<_Key>::size_type MemTable<_Key>::HEADER_SIZE;
-
-
-// A wrapper structure to read from sst files.
-template <typename _Key = LSM_KeyType>
-struct sst_reader {
-    using key_type = _Key;
-    using value_type = std::string;
-    using kv_type = std::pair<key_type, value_type>;
-    using offset_type = uint32_t;
-
-    uint64_t time_stamp, count, lower, upper;  // The header
-    std::vector<std::pair<key_type, offset_type>> indices;
-    basic_ds::BloomFilter<basic_ds::BLF_SIZE> bft;
-    bool is_success;
-
-    sst_reader() = delete;
-    sst_reader(sst_reader&&) = delete;
-    sst_reader(const sst_reader&) = delete;
-    explicit sst_reader(const char *sst_name) : is_success(false), in{sst_name} {
-        if (!in) {
-            return;
-        }
-        std::tuple<uint64_t, uint64_t, uint64_t, uint64_t> header;
-        in.read(reinterpret_cast<char *>(&header), 32);
-        if (!in.good()) {
-            return;
-        }
-        std::tie(time_stamp, count, lower, upper) = header;
-        in >> bft;
-        if (!in.good()) {
-            return;
-        }
-
-        indices = decltype(indices)(count);
-        for (auto& index : indices) {
-            in.read(reinterpret_cast<char *>(&index),
-                    sizeof(key_type) + sizeof(offset_type));
-            if (!in.good()) {
-                return;
-            }
-        }
-        is_success = true;
-    }
-    value_type read_from_offset(offset_type offset) {
-        in.seekg(offset, std::ios::beg);
-        std::string str;
-        for (char c; (in >> c) && c;) {
-            str.append(1, c);
-        }
-        is_success &= static_cast<bool>(in);
-        return str;
-    }
-
-private:
-    std::ifstream in;  // The associated binary file (sst)
-};
+// const lsm::value_type MemTable::DeleteNote = "~DELETED~"s;
+// constexpr typename MemTable::size_type MemTable::HEADER_SIZE;
 
 }  // namespace mtb
 #endif

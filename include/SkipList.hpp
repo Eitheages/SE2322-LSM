@@ -2,22 +2,27 @@
 #define SKIPLIST_CLASS
 
 #include <cassert>
+#include <type_traits>
 #include <vector>
-#include "basic.hpp"
 
 namespace basic_ds {
+using size_type = std::size_t;
 
-template <typename KeyT = mtb::LSM_KeyType, typename ValT = mtb::LSM_ValType>
+// Only for numerical key_type
+template <typename _key_type, typename _value_type,
+          typename = std::enable_if_t<std::is_integral<_key_type>::value>>
 class SkipList {
     // The inner data struct node.
+    using key_type = _key_type;
+    using value_type = _value_type;
     struct SkipListNode {
         friend class SkipList;
 
     public:
-        KeyT key;
-        ValT val;
+        key_type key;
+        value_type val;
 
-        SkipListNode(const KeyT &k, const ValT &v, SkipListNode *p1 = nullptr,
+        SkipListNode(const key_type &k, const value_type &v, SkipListNode *p1 = nullptr,
                      SkipListNode *p2 = nullptr, SkipListNode *p3 = nullptr,
                      SkipListNode *p4 = nullptr)
             : key(k), val(v), _pre(p1), _next(p2), _above(p3), _below(p4) {}
@@ -29,12 +34,12 @@ class SkipList {
     using Node = struct SkipListNode;
 
 public:
-    using kv_type = std::pair<KeyT, ValT>;
+    using kv_type = std::pair<key_type, value_type>;
 
     explicit SkipList() : h{0} {
         std::srand(std::time(nullptr));
-        head.emplace_back(new Node(MIN_KEY, ValT{}));
-        tail.emplace_back(new Node(MAX_KEY, ValT{}));
+        head.emplace_back(new Node(MIN_KEY, value_type{}));
+        tail.emplace_back(new Node(MAX_KEY, value_type{}));
         head[0]->_next = tail[0];
         tail[0]->_pre = head[0];
     }
@@ -51,7 +56,7 @@ public:
 
     // Returns: a pair consisting of: the node inserted, or the node prevent the insertion,
     //          and a bool flag indicates whether the insertion is successfully performed.
-    std::pair<const Node *, bool> insert(const KeyT &key, const ValT &val) {
+    std::pair<const Node *, bool> insert(const key_type &key, const value_type &val) {
         Node *t;
         if (this->searchUtil(key, &t)) {
             assert(t->key == key);
@@ -64,7 +69,8 @@ public:
 
     // Returns: a pair consisting of: the node inserted or updated,
     //          and a flag, true if the insertion took place and false if the update took place.
-    std::pair<const Node *, bool> insert_or_assign(const KeyT &key, const ValT &val) noexcept {
+    std::pair<const Node *, bool> insert_or_assign(const key_type &key,
+                                                   const value_type &val) noexcept {
         Node *t;
         /* update the value */
         if (this->searchUtil(key, &t)) {
@@ -89,7 +95,7 @@ public:
     }
 
     // Returns: the target node if found, otherwise null.
-    const Node *find(const KeyT &key) const {
+    const Node *find(const key_type &key) const {
         Node *p;
         if (this->searchUtil(key, &p)) {
             return p;
@@ -99,8 +105,8 @@ public:
 
     std::vector<kv_type> get_kv() const noexcept {
         std::vector<kv_type> res{};
-        Node* p = head[0]->_next;
-        Node* sentinel = tail[0];
+        Node *p = head[0]->_next;
+        Node *sentinel = tail[0];
         while (p != sentinel) {
             res.emplace_back(std::make_pair(p->key, p->val));
             p = p->_next;
@@ -110,8 +116,8 @@ public:
 
 private:
     static constexpr size_type MAX_LEVEL = std::numeric_limits<size_type>::max();
-    static constexpr KeyT MAX_KEY = std::numeric_limits<KeyT>::max();
-    static constexpr KeyT MIN_KEY = std::numeric_limits<KeyT>::min();
+    static constexpr key_type MAX_KEY = std::numeric_limits<key_type>::max();
+    static constexpr key_type MIN_KEY = std::numeric_limits<key_type>::min();
     // static constexpr size_type PR = 2; // The reciprocal of jump possibility.
     static constexpr size_type BOUND = 24108;  // Jump possibility: 1/e
 
@@ -137,7 +143,7 @@ private:
      *        otherwise the previous node where key should be inserted.
      * @return true if the key exists
      */
-    bool searchUtil(const KeyT &key, Node **p) const {
+    bool searchUtil(const key_type &key, Node **p) const {
         *p = nullptr;
 
         /** Special cases: key == MIN_KEY or key == MAX_KEY */
@@ -187,7 +193,7 @@ private:
      * @param val
      * @param t the previous node.
      */
-    void insertUntil(const KeyT &key, const ValT &val, Node *t) noexcept {
+    void insertUntil(const key_type &key, const value_type &val, Node *t) noexcept {
         /** At the right of t, a tower will be established. */
         Node *pRight = t->_next, *pLeft = t;
         int level = randLevel();
@@ -196,8 +202,8 @@ private:
         pRight->_pre = t;
         while (h < level) {
             ++h;
-            head.emplace_back(new Node(MIN_KEY, ValT{}));
-            tail.emplace_back(new Node(MAX_KEY, ValT{}));
+            head.emplace_back(new Node(MIN_KEY, value_type{}));
+            tail.emplace_back(new Node(MAX_KEY, value_type{}));
             head[h]->_next = tail[h];
             tail[h]->_pre = head[h];
             head[h]->_below = head[h - 1];
@@ -222,14 +228,14 @@ private:
         }
     }
 };
-template <typename KeyT, typename ValT>
-constexpr size_type SkipList<KeyT, ValT>::MAX_LEVEL;
+template <typename KeyT, typename ValT, typename _X>
+constexpr size_type SkipList<KeyT, ValT, _X>::MAX_LEVEL;
 
-template <typename KeyT, typename ValT>
-constexpr KeyT SkipList<KeyT, ValT>::MAX_KEY;
+template <typename KeyT, typename ValT, typename _X>
+constexpr KeyT SkipList<KeyT, ValT, _X>::MAX_KEY;
 
-template <typename KeyT, typename ValT>
-constexpr KeyT SkipList<KeyT, ValT>::MIN_KEY;
+template <typename KeyT, typename ValT, typename _X>
+constexpr KeyT SkipList<KeyT, ValT, _X>::MIN_KEY;
 }  // namespace basic_ds
 
 #endif

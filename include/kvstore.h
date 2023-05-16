@@ -1,9 +1,6 @@
 #pragma once
 
-#include <memory>
-
 #include "kvstore_api.h"
-
 #include "MemTable.hpp"
 
 class KVStore : public KVStoreAPI {
@@ -27,7 +24,7 @@ public:
     void scan(uint64_t key1, uint64_t key2,
               std::list<std::pair<uint64_t, std::string>> &list) override;
 private:
-    using mtb_type = mtb::MemTable<key_type>;
+    using mtb_type = mtb::MemTable;
     const std::string data_dir;
     std::unique_ptr<mtb_type> mtb_ptr;
     uint64_t cur_ts;  // Current time stamp.

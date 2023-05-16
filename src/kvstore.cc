@@ -7,14 +7,16 @@
  * @copyright Copyright (c) 2023, All Rights Reserved.
  *
  */
-#include "../include/kvstore.h"
+#include <iomanip>
 #include <random>
 #include <sstream>
+
 #include "../include/utils.h"
+#include "../include/kvstore.h"
 
 KVStore::KVStore(const std::string &dir)
     : KVStoreAPI(dir), data_dir{_format_dir(dir)}, mtb_ptr{new mtb_type{1}}, cur_ts{1} {
-    static_assert(KVStore::MEMORY_MAXSIZE > basic_ds::BLF_SIZE, "No enough space!");
+    static_assert(KVStore::MEMORY_MAXSIZE > lsm::BLF_SIZE, "No enough space!");
     // Check the directory and create when necessary
     if (utils::mkdir(data_dir.c_str()) != 0) {
         throw std::runtime_error{"Cannot initialize the directory!"};
@@ -88,9 +90,9 @@ std::string KVStore::generate_hash() {
     static std::mt19937 engine{random_device()};
     static std::uniform_int_distribution<> dist(0, 0xFFFFFF);
 
-    auto random_number = dist(engine);
+    uint32_t random_number = dist(engine);
     std::stringstream ss{};
-    ss << std::hex << random_number;
+    ss << std::setw(6) << std::setfill('0') << std::hex << random_number;
     return ss.str();
 }
 

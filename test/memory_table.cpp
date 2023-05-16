@@ -8,7 +8,7 @@ using namespace std::string_literals;
     return 1
 
 int main() {
-    mtb::MemTable<> mtb;
+    mtb::MemTable mtb;
     std::map<decltype(mtb)::key_type, decltype(mtb)::val_type> mp;
 
     TestEqual(10240 + 32, mtb.byte_size());
@@ -43,9 +43,4 @@ int main() {
     TestEqual(51, mtb.size());
 
     mtb.to_binary("test_read.sst");
-
-    mtb::sst_reader<> sr{"test_read.sst"};
-    TestEqual(1, sr.time_stamp);
-    TestEqual(51, sr.count);
-    TestEqual("~DELETED~"s, sr.read_from_offset(sr.indices[2].second));
 }

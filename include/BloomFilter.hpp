@@ -13,23 +13,22 @@
 #include <array>
 #include <istream>
 #include <ostream>
-#include "MurmurHash3.h"
-#include "basic.hpp"
-
-#ifndef NDEBUG
 #include <type_traits>
-#endif
 
+#include "MurmurHash3.h"
 namespace basic_ds {
-
-// Fixed size bloom filter. By default, it can be written into a binary file and occupy 10 KB.
-template <size_type _Size = BLF_SIZE, typename Key = uint64_t, typename CharT = char>
+using size_type = std::size_t;
+// Fixed size bloom filter. By default, it can be written into a binary file and occupies 10 KB.
+// Only for key_type = uint64_t.
+template <size_type _Size>
 class BloomFilter {
 public:
+    using key_type = uint64_t;
+    using CharT = char;  // The inner type to store boolean.
     explicit BloomFilter() : table{} {}
     ~BloomFilter() = default;
 
-    void insert(Key k) noexcept {
+    void insert(key_type k) noexcept {
         getHash(k);
         for (auto x : hash_buf) {
             size_type idx = x / (sizeof(CharT) * 8);
@@ -38,7 +37,7 @@ public:
         }
     }
 
-    bool contains(Key k) const noexcept {
+    bool contains(key_type k) const noexcept {
         getHash(k);
         bool f = true;
         for (auto x : hash_buf) {
@@ -62,7 +61,7 @@ private:
         return os;
     }
 
-    template <class Traits>
+    template <typename Traits>
     friend std::basic_istream<char, Traits> &operator>>(
         std::basic_istream<char, Traits> &is, BloomFilter &bft) {
         is.read(bft.table.data(), _Size);
@@ -71,17 +70,17 @@ private:
 
     // `std::array::data()` ensures:
     // The pointer is such that range [data(); data()+size()) is always a valid range.
-    std::array<CharT, _Size> table;
+    std::array<CharT, _Size> table;  // Use char type to store the boolean.
 
     // Designed by the given hash function.
     static std::array<uint32_t, 4> hash_buf;
 
-    void getHash(Key k) const noexcept {
-#ifndef NDEBUG
-        static_assert(
-            std::is_same<Key, uint64_t>::value,
-            "Current implements of class BloomFilter only support key type uint64_t!");
-#endif
+    void getHash(key_type k) const noexcept {
+        // #ifndef NDEBUG
+        //         static_assert(
+        //             std::is_same<KeyType, uint64_t>::value,
+        //             "Current implements of class BloomFilter only support key type uint64_t!");
+        // #endif
         MurmurHash3_x64_128(&k, sizeof(k), 1, hash_buf.data());
         for (auto &x : hash_buf) {
             x %= _Size * sizeof(CharT) * 8;  // 1 byte = 8 bits
@@ -89,8 +88,8 @@ private:
     }
 };
 
-template <size_type _Size, typename Key, typename CharT>
-std::array<uint32_t, 4> BloomFilter<_Size, Key, CharT>::hash_buf{};
+template <size_type _Size>
+std::array<uint32_t, 4> BloomFilter<_Size>::hash_buf{};
 
 }  // namespace basic_ds
 
