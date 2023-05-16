@@ -2,9 +2,9 @@
 #define MEMTABLE_CLASS
 
 #include <fstream>
-#include "sst.hpp"
 #include "BloomFilter.hpp"
 #include "SkipList.hpp"
+#include "sst.hpp"
 #include "types.hpp"
 
 namespace mtb {
@@ -28,11 +28,8 @@ public:
     ~MemTable() = default;  // TODO
 
     // Returns: -1 on failure (the directory does not exist), 0 on success.
-    sst::sst_cache to_binary(const char *bin_name, uint32_t level) const {
+    sst::sst_cache to_binary(const char *bin_name, int level) const {
         std::ofstream bin_out{bin_name, std::ios::binary};  // Trunc
-        sst::sst_cache cache;
-        cache.sst_path = bin_name;
-        cache.level = level;
 
         // Write the header
         bin_out
@@ -40,26 +37,24 @@ public:
                    sizeof this->_time_stamp)
             .write(reinterpret_cast<const char *>(&this->_count), sizeof this->_count)
             .write(reinterpret_cast<const char *>(&this->_range), sizeof this->_range);
-        cache.header.time_stamp = this->_time_stamp;
-        cache.header.count = this->_count;
-        cache.header.lower = this->_range.first;
-        cache.header.upper = this->_range.second;
 
         // Write the bloom filter
         bin_out << this->bft;
-        cache.bft = this->bft;
 
         auto kv_list = this->dst.get_kv();
 
         // The below implements are value_type-dependent
 
         // Write the index table
+        decltype(sst::sst_cache{}.indices) indices;
+        indices.reserve(this->_count);
+
         offset_type offset = HEADER_SIZE + lsm::BLF_SIZE +
                              this->_count * (sizeof(key_type) + sizeof(offset_type));
         for (kv_type &kv : kv_list) {
             bin_out.write(reinterpret_cast<const char *>(&kv.first), sizeof(key_type))
                 .write(reinterpret_cast<const char *>(&offset), sizeof(offset_type));
-            cache.indices.emplace_back(std::make_pair(kv.first, offset));
+            indices.emplace_back(std::make_pair(kv.first, offset));
             offset += kv.second.length() + 1;  // null-terminated
         }
 
@@ -68,10 +63,15 @@ public:
             bin_out.write(kv.second.c_str(), kv.second.length() + 1);
         }
 
-        return cache;
+        return {
+            level,
+            {this->_time_stamp, this->_count, this->_range.first, this->_range.second},
+            this->bft,
+            std::move(indices),
+            {bin_name}};
     }
 
-    sst::sst_cache to_binary(const std::string &bin_name, uint32_t level) const noexcept {
+    sst::sst_cache to_binary(const std::string &bin_name, int level) const noexcept {
         return this->to_binary(bin_name.c_str(), level);
     }
 
@@ -112,8 +112,7 @@ public:
         if (!get_result.second) {
             return this->_byte + MemTable::predict_insert_size(key, val);
         }
-        return this->_byte +
-               MemTable::predict_update_size(key, val, get_result.first);
+        return this->_byte + MemTable::predict_update_size(key, val, get_result.first);
     }
 
     bool in_range(const key_type &key) const noexcept {

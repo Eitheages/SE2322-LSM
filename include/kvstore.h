@@ -27,9 +27,13 @@ public:
 private:
     using mtb_type = mtb::MemTable;
     const std::string data_dir;
-    std::unique_ptr<mtb_type> mtb_ptr;
     uint64_t cur_ts;  // Current time stamp.
+    std::unique_ptr<mtb_type> mtb_ptr;
     std::vector<sst::sst_cache> caches;
+
+    enum class level_type {
+        TIERING, LEVELING
+    };
 
     static constexpr std::size_t MEMORY_MAXSIZE = 2 * 1024 * 1024; /* 2 MB */
 

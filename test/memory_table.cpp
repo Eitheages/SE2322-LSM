@@ -44,4 +44,5 @@ int main() {
 
     auto cache = mtb.to_binary("test_read.sst", 0);
     TestEqual(51, cache.header.count);
+    TestEqual(0, cache.header.lower);
 }

@@ -7,23 +7,56 @@
  * @copyright Copyright (c) 2023, All Rights Reserved.
  *
  */
+#include <algorithm>
 #include <iomanip>
 #include <random>
 #include <sstream>
 
-#include "../include/utils.h"
 #include "../include/kvstore.h"
+#include "../include/utils.h"
 
 KVStore::KVStore(const std::string &dir)
-    : KVStoreAPI(dir), data_dir{_format_dir(dir)}, mtb_ptr{new mtb_type{1}}, cur_ts{1} {
+    : KVStoreAPI(dir), data_dir{_format_dir(dir)}, cur_ts{1}, mtb_ptr{nullptr} {
     static_assert(KVStore::MEMORY_MAXSIZE > lsm::BLF_SIZE, "No enough space!");
     // Check the directory and create when necessary
     if (utils::mkdir(data_dir.c_str()) != 0) {
         throw std::runtime_error{"Cannot initialize the directory!"};
     }
+    // Check if there is resident data
+    std::vector<std::string> dir_levels{};
+    utils::scanDir(data_dir, dir_levels);
+    if (dir_levels.empty()) {
+        mtb_ptr = std::make_unique<mtb_type>(1);
+        return;
+    }
+    for (const auto &dir : dir_levels) {
+        int level = std::stoi(dir.substr(dir.find('-') + 1));
+        std::string dir_path = data_dir + '/' + dir + '/';
+        std::vector<std::string> sst_list;
+        utils::scanDir(dir_path, sst_list);
+        if (sst_list.empty()) {
+            continue;
+        }
+        for (const auto &sst_name : sst_list) {
+            auto cache = sst::read_sst(dir_path + sst_name, level);
+            this->caches.emplace_back(std::move(cache));
+        }
+    }
+    std::sort(this->caches.begin(), this->caches.end(),
+              [](const sst::sst_cache &a, const sst::sst_cache &b) -> bool {
+                  return a.header.time_stamp > b.header.time_stamp;
+              });
+    if (!this->caches.empty()) {
+        this->cur_ts = this->caches[0].header.time_stamp + 1;
+        mtb_ptr = std::make_unique<mtb_type>(this->cur_ts);
+    } else {
+        mtb_ptr = std::make_unique<mtb_type>(1);
+    }
 }
 
-KVStore::~KVStore() {}
+KVStore::~KVStore() {
+    handle_sst();
+}
 
 /**
  * Insert/Update the key-value pair.
@@ -45,7 +78,14 @@ std::string KVStore::get(uint64_t key) {
     if (mtb_get_res.second) {
         return mtb_get_res.first;
     }
-    return "";
+    for (auto &cache : caches) {
+        if (!(cache.header.lower <= key && key <= cache.header.upper) ||
+            !cache.bft.contains(key)) {
+            return {};
+        }
+        // TODO
+    }
+    return {};
 }
 /**
  * Delete the given key-value pair if it exists.
@@ -71,7 +111,7 @@ void KVStore::scan(uint64_t key1, uint64_t key2,
 
 void KVStore::handle_sst() {
     // TODO all ssts are saved in level-0
-    uint32_t level = 0;
+    int level = 0;
 
     std::string sst_name = KVStore::generate_hash() + ".sst";
 
@@ -81,7 +121,7 @@ void KVStore::handle_sst() {
     }
 
     auto cache = mtb_ptr->to_binary(target_dir + "/" + sst_name, level);
-    this->caches.emplace_back(std::move(cache));
+    this->caches.emplace(this->caches.begin(), std::move(cache));
 
     // Reset the memory table.
     mtb_ptr = std::make_unique<mtb_type>(++this->cur_ts);

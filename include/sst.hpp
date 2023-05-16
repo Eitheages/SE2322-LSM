@@ -11,6 +11,7 @@
 namespace sst {
 
 // Cache for sst files, stored in the memory.
+// It's an aggregate, moveable type.
 struct sst_cache {
     using key_type = lsm::key_type;
     using value_type = lsm::value_type;
@@ -22,14 +23,14 @@ struct sst_cache {
         uint64_t time_stamp, count, lower, upper;  // The header
     };
 
-    uint32_t level;
+    // Variables
+    int level;
     struct sst_header header;
     basic_ds::BloomFilter<lsm::BLF_SIZE> bft;
     std::vector<std::pair<lsm::key_type, lsm::offset_type>> indices;
-
     std::string sst_path;
 
-    value_type read_from_offset(offset_type offset) const {
+    value_type from_offset(offset_type offset) const {
         std::ifstream in{sst_path};
         in.seekg(offset, std::ios::beg);
         std::string str;
@@ -84,15 +85,33 @@ struct sst_reader {
     }
 };
 
-inline sst_cache read_sst(const std::string &sst_path, uint32_t level) {
+/**
+ * @brief Read sst file, return the cache.
+ *
+ * @param sst_path
+ * @param level
+ * @return sst_cache, level -1 indicates the read is failed or the given argument is invalid.
+ */
+inline sst_cache read_sst(const std::string &sst_path, int level) {
+    if (level < 0) {
+        return {-1};
+    }
     sst_reader sr{sst_path.c_str()};
+    if (!sr.is_success) {
+        return {-1};
+    }
 
-    sst_cache res;
-    res.indices.swap(sr.indices);
-    res.header = {sr.time_stamp, sr.count, sr.lower, sr.upper};
-    res.level = level;
-    res.sst_path = sst_path;
-    std::swap(res.bft, sr.bft);
+    sst_cache res{level,
+                  {sr.time_stamp, sr.count, sr.lower, sr.upper},
+                  std::move(sr.bft),
+                  std::move(sr.indices),
+                  std::move(sst_path)};
+    // sst_cache res;
+    // res.indices = std::move(sr.indices);
+    // res.header = {sr.time_stamp, sr.count, sr.lower, sr.upper};
+    // res.level = level;
+    // res.sst_path = sst_path;
+    // std::swap(res.bft, sr.bft);
 
     return res;
 }
