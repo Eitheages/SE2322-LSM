@@ -1,16 +1,16 @@
 #pragma once
 
+#include <memory>
+
 #include "kvstore_api.h"
 
 #include "MemTable.hpp"
 
 class KVStore : public KVStoreAPI {
     // You can add your implementation here
-private:
-    const std::string data_dir;
-    mtb::MemTable<> mtb;
-
 public:
+    using key_type = uint64_t;
+    using value_type = std::string;
     KVStore(const std::string &dir);
     KVStore() = delete;
 
@@ -18,7 +18,7 @@ public:
 
     void put(uint64_t key, const std::string &s) override;
 
-    std::string get(uint64_t key) override;
+    value_type get(uint64_t key) override;
 
     bool del(uint64_t key) override;
 
@@ -26,4 +26,27 @@ public:
 
     void scan(uint64_t key1, uint64_t key2,
               std::list<std::pair<uint64_t, std::string>> &list) override;
+private:
+    using mtb_type = mtb::MemTable<key_type>;
+    const std::string data_dir;
+    std::unique_ptr<mtb_type> mtb_ptr;
+    uint64_t cur_ts;  // Current time stamp.
+
+    static constexpr std::size_t MEMORY_MAXSIZE = 2 * 1024 * 1024; /* 2 MB */
+
+    /**
+     * @brief The flow to be implemented when `put` or `delete` (aka put `"~DELETED~"`)
+     *        operation will overflow the memory table size.
+     */
+    void handle_sst();
+
+    inline static std::string generate_hash();
+
+    std::string _format_dir(const std::string &dir) {
+        // TODO improve robustness
+        return dir;
+    }
+
+    std::pair<value_type, bool> search_sst(key_type key) const;
+
 };

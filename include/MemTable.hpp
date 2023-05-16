@@ -16,8 +16,15 @@ public:
     using size_type = basic_ds::size_type;
     using kv_type = std::pair<key_type, val_type>;
 
+
     explicit MemTable()
         : _time_stamp(1),
+          _count(0),
+          _range{1, 0},
+          _byte(HEADER_SIZE + basic_ds::BLF_SIZE) {}
+
+    explicit MemTable(uint64_t ts)
+        : _time_stamp(ts),
           _count(0),
           _range{1, 0},
           _byte(HEADER_SIZE + basic_ds::BLF_SIZE) {}
@@ -139,7 +146,6 @@ private:
     using offset_type = uint32_t;
     static const val_type DeleteNote; /* ~DELETE~ */
     static constexpr size_type HEADER_SIZE = 32;
-    static constexpr size_type MAXSIZE = 2 * 1024 * 1024; /* 2 MB */
 
     /** 32 bytes in the header */
     uint64_t _time_stamp;
@@ -171,8 +177,6 @@ const LSM_ValType MemTable<_Key>::DeleteNote = "~DELETED~"s;
 template <typename _Key>
 constexpr typename MemTable<_Key>::size_type MemTable<_Key>::HEADER_SIZE;
 
-template <typename _Key>
-constexpr typename MemTable<_Key>::size_type MemTable<_Key>::MAXSIZE;
 
 // A wrapper structure to read from sst files.
 template <typename _Key = LSM_KeyType>
@@ -188,6 +192,8 @@ struct sst_reader {
     bool is_success;
 
     sst_reader() = delete;
+    sst_reader(sst_reader&&) = delete;
+    sst_reader(const sst_reader&) = delete;
     explicit sst_reader(const char *sst_name) : is_success(false), in{sst_name} {
         if (!in) {
             return;
