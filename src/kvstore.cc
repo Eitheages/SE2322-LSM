@@ -71,14 +71,17 @@ void KVStore::scan(uint64_t key1, uint64_t key2,
 
 void KVStore::handle_sst() {
     // TODO all ssts are saved in level-0
+    uint32_t level = 0;
+
     std::string sst_name = KVStore::generate_hash() + ".sst";
 
-    const std::string target_dir = this->data_dir + "/level-0";
+    const std::string target_dir = this->data_dir + "/level-" + std::to_string(level);
     if (utils::mkdir(target_dir.c_str()) != 0) {
         throw std::runtime_error{"Cannot create directory " + target_dir};
     }
 
-    mtb_ptr->to_binary(target_dir + "/" + sst_name);
+    auto cache = mtb_ptr->to_binary(target_dir + "/" + sst_name, level);
+    this->caches.emplace_back(std::move(cache));
 
     // Reset the memory table.
     mtb_ptr = std::make_unique<mtb_type>(++this->cur_ts);

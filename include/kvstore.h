@@ -2,6 +2,7 @@
 
 #include "kvstore_api.h"
 #include "MemTable.hpp"
+#include "sst.hpp"
 
 class KVStore : public KVStoreAPI {
     // You can add your implementation here
@@ -28,6 +29,7 @@ private:
     const std::string data_dir;
     std::unique_ptr<mtb_type> mtb_ptr;
     uint64_t cur_ts;  // Current time stamp.
+    std::vector<sst::sst_cache> caches;
 
     static constexpr std::size_t MEMORY_MAXSIZE = 2 * 1024 * 1024; /* 2 MB */
 

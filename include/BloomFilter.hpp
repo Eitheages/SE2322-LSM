@@ -28,6 +28,11 @@ public:
     explicit BloomFilter() : table{} {}
     ~BloomFilter() = default;
 
+    auto operator=(const BloomFilter& other) {
+        this->table = other.table;
+        return *this;
+    }
+
     void insert(key_type k) noexcept {
         getHash(k);
         for (auto x : hash_buf) {

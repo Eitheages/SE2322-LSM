@@ -42,5 +42,6 @@ int main() {
     mtb.put(3, "~DELETED~"s);
     TestEqual(51, mtb.size());
 
-    mtb.to_binary("test_read.sst");
+    auto cache = mtb.to_binary("test_read.sst", 0);
+    TestEqual(51, cache.header.count);
 }
