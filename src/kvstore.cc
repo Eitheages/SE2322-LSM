@@ -105,6 +105,9 @@ std::string KVStore::get(uint64_t key) {
 bool KVStore::del(uint64_t key) {
     auto mtb_get_res = mtb_ptr->get(key);
     if (mtb_get_res.second) {
+        if (mtb_get_res.first == KVStore::DeleteNote) {
+            return false;
+        }
         this->mtb_ptr->put(key, KVStore::DeleteNote);
         return true;
     }
@@ -113,6 +116,10 @@ bool KVStore::del(uint64_t key) {
         bool flag;
         std::tie(offset, flag) = cache.search(key);
         if (flag) {
+            std::string found = cache.from_offset(offset);
+            if (found == KVStore::DeleteNote) {
+                return false;
+            }
             this->mtb_ptr->put(key, KVStore::DeleteNote);
             return true;
         }
