@@ -25,7 +25,7 @@ public:
     explicit MemTable(uint64_t ts)
         : _time_stamp(ts), _count(0), _range{1, 0}, _byte(HEADER_SIZE + lsm::BLF_SIZE) {}
 
-    ~MemTable() = default;  // TODO
+    ~MemTable() = default;  // nothing todo
 
     // Returns: -1 on failure (the directory does not exist), 0 on success.
     sst::sst_cache to_binary(const char *bin_name, int level) const {
@@ -54,7 +54,7 @@ public:
         for (kv_type &kv : kv_list) {
             bin_out.write(reinterpret_cast<const char *>(&kv.first), sizeof(key_type))
                 .write(reinterpret_cast<const char *>(&offset), sizeof(offset_type));
-            indices.emplace_back(std::make_pair(kv.first, offset));
+            indices.emplace_back(kv.first, offset);
             offset += kv.second.length() + 1;  // null-terminated
         }
 

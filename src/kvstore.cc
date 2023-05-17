@@ -40,19 +40,21 @@ KVStore::KVStore(const std::string &dir)
         }
         for (const auto &sst_name : sst_list) {
             auto cache = sst::read_sst(dir_path + sst_name, level);
-            this->caches.emplace_back(std::move(cache));
+            this->caches.push_back(std::move(cache));
         }
     }
     std::sort(this->caches.begin(), this->caches.end(),
-              [](const sst::sst_cache &a, const sst::sst_cache &b) -> bool {
-                  return a.header.time_stamp > b.header.time_stamp;
-              });
+              std::greater<decltype(this->caches)::value_type>{});
     if (!this->caches.empty()) {
         this->cur_ts = this->caches[0].header.time_stamp + 1;
         mtb_ptr = std::make_unique<mtb_type>(this->cur_ts);
     } else {
         mtb_ptr = std::make_unique<mtb_type>(1);
     }
+
+    // Hard-coded configuration
+    this->strategy = {{0, 2, level_type::TIERING}, {1, 4}, {2, 8}, {3, 16}, {4, 32},
+                      {5, /* uint32_max */}};
 }
 
 KVStore::~KVStore() {
@@ -163,21 +165,40 @@ void KVStore::scan(uint64_t key1, uint64_t key2,
                    std::list<std::pair<uint64_t, std::string>> &list) {}
 
 void KVStore::handle_sst() {
-    // TODO all ssts are saved in level-0
-    int level = 0;
-
+    // Write the memory table to level-0
     std::string sst_name = KVStore::generate_hash() + ".sst";
 
-    const std::string target_dir = this->data_dir + "/level-" + std::to_string(level);
+    const std::string target_dir = this->data_dir + "/level-0";
     if (utils::mkdir(target_dir.c_str()) != 0) {
         throw std::runtime_error{"Cannot create directory " + target_dir};
     }
 
-    auto cache = mtb_ptr->to_binary(target_dir + "/" + sst_name, level);
+    auto cache = mtb_ptr->to_binary(target_dir + "/" + sst_name, 0);
     this->caches.emplace(this->caches.begin(), std::move(cache));
 
     // Reset the memory table.
     mtb_ptr = std::make_unique<mtb_type>(++this->cur_ts);
+
+    // Recursively check each level
+    check_level(0);
+}
+
+void KVStore::check_level(int level) {
+    assert(level < strategy.size()); // The strategy generated method ensures this.
+    if (level >= strategy.size()) {
+        return;
+    }
+    std::vector<std::string> files;
+    utils::scanDir(data_dir + "/level-" + std::to_string(level), files);
+    if (files.size() <= strategy[level].max_file) {
+        return;
+    }
+    compact(level, level + 1);
+    check_level(level + 1);
+}
+
+void KVStore::compact(int l1, int l2) {
+    // TODO compaction
 }
 
 std::string KVStore::generate_hash() {

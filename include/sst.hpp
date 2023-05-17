@@ -26,7 +26,7 @@ struct sst_cache {
     // Variables
     int level;
     struct sst_header header;
-    basic_ds::BloomFilter<lsm::BLF_SIZE> bft; // bloom filter is designed to be moveable.
+    basic_ds::BloomFilter<lsm::BLF_SIZE> bft;  // bloom filter is designed to be moveable.
     std::vector<std::pair<lsm::key_type, lsm::offset_type>> indices;
     std::string sst_path;
 
@@ -48,15 +48,19 @@ struct sst_cache {
             return {0, false};
         }
         using pair_type = decltype(indices)::value_type;
-        static auto comp = [](const pair_type &p1, const pair_type &p2) -> bool {
-            return p1.first < p2.first;
-        };
-        auto it =
-            std::lower_bound(indices.begin(), indices.end(), pair_type{key, 0}, comp);
+        auto it = std::lower_bound(indices.begin(), indices.end(), pair_type{key, 0});
         if (it == indices.cend()) {
             return {0, false};
         }
         return {it->second, true};
+    }
+
+    bool operator<(const sst_cache &other) const {
+        return this->header.time_stamp < other.header.time_stamp;
+    }
+
+    bool operator>(const sst_cache &other) const {
+        return other < *this;
     }
 };
 
@@ -134,5 +138,6 @@ inline sst_cache read_sst(const std::string &sst_path, int level) {
 
     return res;
 }
+
 }  // namespace sst
 #endif

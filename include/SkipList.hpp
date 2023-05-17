@@ -38,8 +38,8 @@ public:
 
     explicit SkipList() : h{0} {
         std::srand(std::time(nullptr));
-        head.emplace_back(new Node(MIN_KEY, value_type{}));
-        tail.emplace_back(new Node(MAX_KEY, value_type{}));
+        head.push_back(new Node(MIN_KEY, value_type{}));
+        tail.push_back(new Node(MAX_KEY, value_type{}));
         head[0]->_next = tail[0];
         tail[0]->_pre = head[0];
     }
@@ -108,7 +108,7 @@ public:
         Node *p = head[0]->_next;
         Node *sentinel = tail[0];
         while (p != sentinel) {
-            res.emplace_back(std::make_pair(p->key, p->val));
+            res.emplace_back(p->key, p->val);
             p = p->_next;
         }
         return res;
@@ -202,8 +202,8 @@ private:
         pRight->_pre = t;
         while (h < level) {
             ++h;
-            head.emplace_back(new Node(MIN_KEY, value_type{}));
-            tail.emplace_back(new Node(MAX_KEY, value_type{}));
+            head.push_back(new Node(MIN_KEY, value_type{}));
+            tail.push_back(new Node(MAX_KEY, value_type{}));
             head[h]->_next = tail[h];
             tail[h]->_pre = head[h];
             head[h]->_below = head[h - 1];
