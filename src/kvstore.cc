@@ -19,8 +19,9 @@ KVStore::KVStore(const std::string &dir)
     : KVStoreAPI(dir), data_dir{_format_dir(dir)}, cur_ts{1}, mtb_ptr{nullptr} {
     static_assert(KVStore::MEMORY_MAXSIZE > lsm::BLF_SIZE, "No enough space!");
     // Check the directory and create when necessary
-    if (utils::mkdir(data_dir.c_str()) != 0) {
-        throw std::runtime_error{"Cannot initialize the directory!"};
+    // TODO don't throw an exception
+    if (!utils::dirExists(dir)) {
+        throw std::runtime_error{"No such data directory!"};
     }
     // Check if there is resident data
     std::vector<std::string> dir_levels{};
@@ -55,7 +56,9 @@ KVStore::KVStore(const std::string &dir)
 }
 
 KVStore::~KVStore() {
-    handle_sst();
+    if (this->mtb_ptr->size() != 0) {
+        handle_sst();
+    }
 }
 
 /**
@@ -76,14 +79,22 @@ void KVStore::put(uint64_t key, const std::string &s) {
 std::string KVStore::get(uint64_t key) {
     auto mtb_get_res = mtb_ptr->get(key);
     if (mtb_get_res.second) {
+        if (mtb_get_res.first == KVStore::DeleteNote) {
+            return {};
+        }
         return mtb_get_res.first;
     }
     for (auto &cache : caches) {
-        if (!(cache.header.lower <= key && key <= cache.header.upper) ||
-            !cache.bft.contains(key)) {
-            return {};
+        lsm::offset_type offset;
+        bool flag;
+        std::tie(offset, flag) = cache.search(key);
+        if (flag) {
+            std::string res = cache.from_offset(offset);
+            if (res == KVStore::DeleteNote) {
+                return {};
+            }
+            return res;
         }
-        // TODO
     }
     return {};
 }
@@ -92,6 +103,20 @@ std::string KVStore::get(uint64_t key) {
  * Returns false iff the key is not found.
  */
 bool KVStore::del(uint64_t key) {
+    auto mtb_get_res = mtb_ptr->get(key);
+    if (mtb_get_res.second) {
+        this->mtb_ptr->put(key, KVStore::DeleteNote);
+        return true;
+    }
+    for (auto &cache : caches) {
+        lsm::offset_type offset;
+        bool flag;
+        std::tie(offset, flag) = cache.search(key);
+        if (flag) {
+            this->mtb_ptr->put(key, KVStore::DeleteNote);
+            return true;
+        }
+    }
     return false;
 }
 
@@ -99,7 +124,28 @@ bool KVStore::del(uint64_t key) {
  * This resets the kvstore. All key-value pairs should be removed,
  * including memtable and all sstables files.
  */
-void KVStore::reset() {}
+void KVStore::reset() {
+    std::vector<std::string> dir_levels{};
+    utils::scanDir(data_dir, dir_levels);
+    if (dir_levels.empty()) {
+        return;
+    }
+    for (const auto &dir : dir_levels) {
+        std::string dir_path = data_dir + '/' + dir + '/';
+        std::vector<std::string> sst_list;
+        utils::scanDir(dir_path, sst_list);
+        if (sst_list.empty()) {
+            continue;
+        }
+        for (const auto &sst_name : sst_list) {
+            utils::rmfile((dir_path + sst_name).c_str());
+        }
+        utils::rmdir(dir_path.c_str());
+    }
+    this->caches = decltype(this->caches){};
+    this->cur_ts = 1;
+    this->mtb_ptr = std::make_unique<mtb_type>(1);
+}
 
 /**
  * Return a list including all the key-value pair between key1 and key2.
@@ -139,6 +185,4 @@ std::string KVStore::generate_hash() {
     return ss.str();
 }
 
-std::pair<typename KVStore::value_type, bool> KVStore::search_sst(key_type key) const {
-    return {};
-}
+const typename KVStore::value_type KVStore::DeleteNote{"~DELETED~"};

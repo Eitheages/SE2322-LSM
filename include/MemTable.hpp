@@ -144,7 +144,6 @@ public:
     }
 
 private:
-    static const val_type DeleteNote; /* ~DELETE~ */
     static constexpr size_type HEADER_SIZE = 32;
 
     /** 32 bytes in the header */

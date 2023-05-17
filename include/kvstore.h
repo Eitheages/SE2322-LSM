@@ -36,6 +36,7 @@ private:
     };
 
     static constexpr std::size_t MEMORY_MAXSIZE = 2 * 1024 * 1024; /* 2 MB */
+    static const value_type DeleteNote; /* ~DELETE~ */
 
     /**
      * @brief The flow to be implemented when `put` or `delete` (aka put `"~DELETED~"`)
@@ -49,7 +50,5 @@ private:
         // TODO improve robustness
         return dir;
     }
-
-    std::pair<value_type, bool> search_sst(key_type key) const;
 
 };

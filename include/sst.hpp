@@ -26,10 +26,11 @@ struct sst_cache {
     // Variables
     int level;
     struct sst_header header;
-    basic_ds::BloomFilter<lsm::BLF_SIZE> bft;
+    basic_ds::BloomFilter<lsm::BLF_SIZE> bft; // bloom filter is designed to be moveable.
     std::vector<std::pair<lsm::key_type, lsm::offset_type>> indices;
     std::string sst_path;
 
+    // Read the associated sst file and return the value from offset.
     value_type from_offset(offset_type offset) const {
         std::ifstream in{sst_path};
         in.seekg(offset, std::ios::beg);
@@ -38,6 +39,24 @@ struct sst_cache {
             str.append(1, c);
         }
         return str;
+    }
+
+    // Search the key in indices. If found, return the offset and bool flag `true`.
+    std::pair<offset_type, bool> search(key_type key) const {
+        if (!(this->header.lower <= key && key <= this->header.upper) ||
+            !this->bft.contains(key)) {
+            return {0, false};
+        }
+        using pair_type = decltype(indices)::value_type;
+        static auto comp = [](const pair_type &p1, const pair_type &p2) -> bool {
+            return p1.first < p2.first;
+        };
+        auto it =
+            std::lower_bound(indices.begin(), indices.end(), pair_type{key, 0}, comp);
+        if (it == indices.cend()) {
+            return {0, false};
+        }
+        return {it->second, true};
     }
 };
 
