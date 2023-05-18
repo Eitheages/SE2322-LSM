@@ -16,7 +16,7 @@
 #include "../include/utils.h"
 
 KVStore::KVStore(const std::string &dir)
-    : KVStoreAPI(dir), data_dir{_format_dir(dir)}, cur_ts{1}, mtb_ptr{nullptr} {
+    : KVStoreAPI(dir), data_dir{dir}, cur_ts{1}, mtb_ptr{nullptr} {
     static_assert(KVStore::MEMORY_MAXSIZE > lsm::BLF_SIZE, "No enough space!");
     // Hard-coded configuration
     strategy = {{0, 2, level_type::TIERING}, {1, 4}, {2, 8}, {3, 16}, {4, 32},
@@ -30,7 +30,7 @@ KVStore::KVStore(const std::string &dir)
     std::vector<std::string> dir_list{};
     utils::scanDir(data_dir, dir_list);
 
-    for (const std::string& level_dir : dir_list) {
+    for (const std::string &level_dir : dir_list) {
         int level = std::stoi(level_dir.substr(level_dir.find('-') + 1));
         std::string dir_path = data_dir + '/' + level_dir + '/';
         std::vector<std::string> sst_list;
@@ -183,9 +183,9 @@ void KVStore::check_level(int level) {
     if (level >= strategy.size()) {
         return;
     }
-    auto file_count = std::count_if(
-        caches.begin(), caches.end(),
-        [=](const sst::sst_cache &cache) -> bool { return cache.level == level; });
+    auto file_count =
+        std::count_if(caches.begin(), caches.end(),
+                      [=](const sst::sst_cache &cache) -> bool { return cache.level == level; });
     if (file_count <= strategy[level].max_file) {
         return;
     }
@@ -194,38 +194,57 @@ void KVStore::check_level(int level) {
 }
 
 void KVStore::compact(int l1, int l2) {
-    // TODO compaction
     // Step 1: SSTable select
 
     // 1.1 select from level l1
-    key_type l1_min_key = std::numeric_limits<key_type>::max();
-    key_type l1_max_key = std::numeric_limits<key_type>::min();
-    std::vector<sst::sst_cache> lhs_selected_cache{};
+    std::vector<sst::sst_cache> selected_cache{};
     // Tiering: select all
-    uint32_t lhs_selected_cnt = std::count_if(
-        caches.begin(), caches.end(),
-        [=](const sst::sst_cache &cache) -> bool { return cache.level == l1; });
+    uint32_t lhs_selected_cnt =
+        std::count_if(caches.begin(), caches.end(),
+                      [=](const sst::sst_cache &cache) -> bool { return cache.level == l1; });
     // Leveling: truncate
     if (strategy[l1].type == level_type::LEVELING) {
         lhs_selected_cnt -= strategy[l1].max_file;
     }
 
-    lhs_selected_cache.reserve(lhs_selected_cnt);
+    selected_cache.reserve(lhs_selected_cnt);
     for (auto it = caches.begin();
-         it != caches.end() && lhs_selected_cache.size() < lhs_selected_cnt;) {
+         it != caches.end() && selected_cache.size() < lhs_selected_cnt;) {
         if (it->level == l1) {
-            l1_max_key = std::max(it->header.upper, l1_max_key);
-            l1_min_key = std::min(it->header.lower, l1_min_key);
-            lhs_selected_cache.push_back(std::move(*it));
+            selected_cache.push_back(std::move(*it));
             it = caches.erase(it);
         } else {
             ++it;
         }
     }
-    assert(lhs_selected_cache.size() == lhs_selected_cnt);
+    assert(selected_cache.size() == lhs_selected_cnt);
 
     // 1.2 select from level l2
-    std::vector<sst::sst_cache> rhs_selected_cache{};
+    if (strategy[l2].type == level_type::LEVELING) {
+        key_type min_key = std::numeric_limits<key_type>::max();
+        key_type max_key = std::numeric_limits<key_type>::min();
+        for (const auto &cache : selected_cache) {
+            min_key = std::min(min_key, cache.header.lower);
+            max_key = std::max(max_key, cache.header.upper);
+        }
+        auto if_select = [&](const sst::sst_cache &cache) -> bool {
+            return cache.header.lower > max_key || cache.header.upper < min_key;
+        };
+        for (auto it = caches.begin(); it != caches.end();) {
+            if (if_select(*it)) {
+                max_key = std::max(max_key, it->header.upper);
+                min_key = std::min(min_key, it->header.lower);
+                selected_cache.push_back(std::move(*it));
+                it = caches.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
+    // Step 2: merge sort
+    std::vector<sst::sst_cache> merged_cache = sst::sort_and_merge(selected_cache, l2);
+    this->caches.insert(caches.end(), std::make_move_iterator(merged_cache.begin()), std::make_move_iterator(merged_cache.end()));
 }
 
 std::string KVStore::generate_hash() {

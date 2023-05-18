@@ -74,9 +74,4 @@ public:
     void compact(int l1, int l2);
 
     inline static std::string generate_hash();
-
-    std::string _format_dir(const std::string &dir) {
-        // TODO improve robustness
-        return dir;
-    }
 };

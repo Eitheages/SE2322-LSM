@@ -43,13 +43,12 @@ struct sst_cache {
 
     // Search the key in indices. If found, return the offset and bool flag `true`.
     std::pair<offset_type, bool> search(key_type key) const {
-        if (!(this->header.lower <= key && key <= this->header.upper) ||
-            !this->bft.contains(key)) {
+        if (!(this->header.lower <= key && key <= this->header.upper) || !this->bft.contains(key)) {
             return {0, false};
         }
         using pair_type = decltype(indices)::value_type;
         auto it = std::lower_bound(indices.begin(), indices.end(), pair_type{key, 0});
-        if (it == indices.cend()) {
+        if (it == indices.cend() || it->first != key) {
             return {0, false};
         }
         return {it->second, true};
@@ -100,8 +99,7 @@ struct sst_reader {
 
         indices = decltype(indices)(count);
         for (auto &index : indices) {
-            in.read(reinterpret_cast<char *>(&index),
-                    sizeof(key_type) + sizeof(offset_type));
+            in.read(reinterpret_cast<char *>(&index), sizeof(key_type) + sizeof(offset_type));
             if (!in.good()) {
                 return;
             }
@@ -138,6 +136,19 @@ inline sst_cache read_sst(const std::string &sst_path, int level) {
     // res.sst_path = sst_path;
     // std::swap(res.bft, sr.bft);
     // return res;
+}
+
+/**
+ * @brief Merge sort multiple sst files. This function will delete all the referred ssts,
+ *        and write at least several ssts into the target level.
+ * @param cache_list
+ * @param level the target level where the compacted ssts are put into.
+ * @return std::vector<sst::sst_cache> the caches associated with newly-created ssts.
+ */
+inline std::vector<sst::sst_cache> sort_and_merge(const std::vector<sst::sst_cache> &cache_list,
+                                                  int level) {
+    // TODO
+    return {};
 }
 
 }  // namespace sst
