@@ -27,9 +27,14 @@ public:
 
     ~MemTable() = default;  // nothing todo
 
-    // Returns: -1 on failure (the directory does not exist), 0 on success.
-    sst::sst_cache to_binary(const char *bin_name, int level) const {
+    // This method is a little dangerous, since it throw an exception
+    sst::sst_cache to_binary(const std::string &bin_name, int level) const {
         std::ofstream bin_out{bin_name, std::ios::binary};  // Trunc
+        if (!bin_out) {
+            throw std::runtime_error {
+                "Cannot write sst " + bin_name + ". Please check if the directory exists."
+            };
+        }
 
         // Write the header
         bin_out
@@ -69,10 +74,6 @@ public:
             this->bft,
             std::move(indices),
             {bin_name}};
-    }
-
-    sst::sst_cache to_binary(const std::string &bin_name, int level) const noexcept {
-        return this->to_binary(bin_name.c_str(), level);
     }
 
     void put(const key_type &key, const val_type &val) noexcept {

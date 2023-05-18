@@ -25,7 +25,7 @@ public:
     void scan(uint64_t key1, uint64_t key2,
               std::list<std::pair<uint64_t, std::string>> &list) override;
 
-private:
+// private: // TODO after debugging
     using mtb_type = mtb::MemTable;
     enum class level_type { TIERING, LEVELING };
     struct lsm_config {

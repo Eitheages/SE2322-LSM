@@ -18,44 +18,36 @@
 KVStore::KVStore(const std::string &dir)
     : KVStoreAPI(dir), data_dir{_format_dir(dir)}, cur_ts{1}, mtb_ptr{nullptr} {
     static_assert(KVStore::MEMORY_MAXSIZE > lsm::BLF_SIZE, "No enough space!");
+    // Hard-coded configuration
+    strategy = {{0, 2, level_type::TIERING}, {1, 4}, {2, 8}, {3, 16}, {4, 32},
+                {5, /* uint32_max */}};
+
     // Check the directory and create when necessary
-    // TODO don't throw an exception
     if (!utils::dirExists(dir)) {
         throw std::runtime_error{"No such data directory!"};
     }
 
-    // Hard-coded configuration
-    this->strategy = {{0, 2, level_type::TIERING}, {1, 4}, {2, 8}, {3, 16}, {4, 32},
-                      {5, /* uint32_max */}};
+    std::vector<std::string> dir_list{};
+    utils::scanDir(data_dir, dir_list);
 
-    // Check if there is resident data
-    std::vector<std::string> dir_levels{};
-    utils::scanDir(data_dir, dir_levels);
-    if (dir_levels.empty()) {
-        mtb_ptr = std::make_unique<mtb_type>(1);
-        return;
-    }
-    for (const auto &dir : dir_levels) {
-        int level = std::stoi(dir.substr(dir.find('-') + 1));
-        std::string dir_path = data_dir + '/' + dir + '/';
+    for (const std::string& level_dir : dir_list) {
+        int level = std::stoi(level_dir.substr(level_dir.find('-') + 1));
+        std::string dir_path = data_dir + '/' + level_dir + '/';
         std::vector<std::string> sst_list;
         utils::scanDir(dir_path, sst_list);
-        if (sst_list.empty()) {
-            continue;
-        }
         for (const auto &sst_name : sst_list) {
             auto cache = sst::read_sst(dir_path + sst_name, level);
-            this->caches.push_back(std::move(cache));
+            if (cache.level == -1) {
+                throw std::runtime_error{"Cannot read sst " + dir_path + sst_name};
+            }
+            caches.push_back(std::move(cache));
         }
     }
-    std::sort(this->caches.begin(), this->caches.end(),
-              std::less<decltype(this->caches)::value_type>{});
-    if (this->caches.empty()) {
-        mtb_ptr = std::make_unique<mtb_type>(1);
-    } else {
-        this->cur_ts = this->caches.back().header.time_stamp + 1;
-        mtb_ptr = std::make_unique<mtb_type>(this->cur_ts);
+    std::sort(caches.begin(), caches.end(), std::less<decltype(caches)::value_type>{});
+    if (!caches.empty()) {
+        cur_ts = caches.back().header.time_stamp + 1;
     }
+    mtb_ptr = std::make_unique<mtb_type>(cur_ts);
 }
 
 KVStore::~KVStore() {
@@ -147,9 +139,6 @@ void KVStore::reset() {
         std::string dir_path = data_dir + '/' + dir + '/';
         std::vector<std::string> sst_list;
         utils::scanDir(dir_path, sst_list);
-        if (sst_list.empty()) {
-            continue;
-        }
         for (const auto &sst_name : sst_list) {
             utils::rmfile((dir_path + sst_name).c_str());
         }
@@ -173,13 +162,14 @@ void KVStore::handle_sst() {
     std::string sst_name = KVStore::generate_hash() + ".sst";
 
     const std::string target_dir = this->data_dir + "/level-0";
-    if (utils::mkdir(target_dir.c_str()) != 0) {
-        // TODO do not throw an exception
-        throw std::runtime_error{"Cannot create directory " + target_dir};
-    }
+    utils::mkdir(target_dir.c_str());
 
     auto cache = mtb_ptr->to_binary(target_dir + "/" + sst_name, 0);
     this->caches.push_back(std::move(cache));
+    /**
+     * All caches maintained by kvstore has smaller time stamp.
+     * Therefore, no need to sort.
+     */
 
     // Reset the memory table.
     mtb_ptr = std::make_unique<mtb_type>(++this->cur_ts);
@@ -235,8 +225,7 @@ void KVStore::compact(int l1, int l2) {
     assert(lhs_selected_cache.size() == lhs_selected_cnt);
 
     // 1.2 select from level l2
-
-
+    std::vector<sst::sst_cache> rhs_selected_cache{};
 }
 
 std::string KVStore::generate_hash() {
