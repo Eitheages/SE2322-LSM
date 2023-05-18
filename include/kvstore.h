@@ -57,7 +57,7 @@ private:
     const std::string data_dir;  // No ending '/'
     uint64_t cur_ts;             // Current time stamp.
     std::unique_ptr<mtb_type> mtb_ptr;
-    std::vector<sst::sst_cache> caches;
+    std::vector<sst::sst_cache> caches; // Ordered by timestamp (ascending)
     std::vector<lsm_config> strategy;
 
     static constexpr std::size_t MEMORY_MAXSIZE = 2 * 1024 * 1024; /* 2 MB */

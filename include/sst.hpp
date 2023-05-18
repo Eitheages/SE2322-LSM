@@ -28,7 +28,7 @@ struct sst_cache {
     struct sst_header header;
     basic_ds::BloomFilter<lsm::BLF_SIZE> bft;  // bloom filter is designed to be moveable.
     std::vector<std::pair<lsm::key_type, lsm::offset_type>> indices;
-    std::string sst_path;
+    std::string sst_path;  // The associated sst file (full path)
 
     // Read the associated sst file and return the value from offset.
     value_type from_offset(offset_type offset) const {
@@ -55,12 +55,14 @@ struct sst_cache {
         return {it->second, true};
     }
 
-    bool operator<(const sst_cache &other) const {
-        return this->header.time_stamp < other.header.time_stamp;
+    bool operator<(const sst_cache &rhs) const {
+        return (this->header.time_stamp < rhs.header.time_stamp) ||
+               (this->header.time_stamp == rhs.header.time_stamp &&
+                this->header.count < rhs.header.count);
     }
 
-    bool operator>(const sst_cache &other) const {
-        return other < *this;
+    bool operator>(const sst_cache &rhs) const {
+        return rhs < *this;
     }
 };
 
@@ -124,19 +126,18 @@ inline sst_cache read_sst(const std::string &sst_path, int level) {
         return {-1};
     }
 
-    sst_cache res{level,
-                  {sr.time_stamp, sr.count, sr.lower, sr.upper},
-                  std::move(sr.bft),
-                  std::move(sr.indices),
-                  std::move(sst_path)};
+    return {level,
+            {sr.time_stamp, sr.count, sr.lower, sr.upper},
+            std::move(sr.bft),
+            std::move(sr.indices),
+            std::move(sst_path)};
     // sst_cache res;
     // res.indices = std::move(sr.indices);
     // res.header = {sr.time_stamp, sr.count, sr.lower, sr.upper};
     // res.level = level;
     // res.sst_path = sst_path;
     // std::swap(res.bft, sr.bft);
-
-    return res;
+    // return res;
 }
 
 }  // namespace sst

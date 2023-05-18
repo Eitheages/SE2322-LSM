@@ -23,6 +23,11 @@ KVStore::KVStore(const std::string &dir)
     if (!utils::dirExists(dir)) {
         throw std::runtime_error{"No such data directory!"};
     }
+
+    // Hard-coded configuration
+    this->strategy = {{0, 2, level_type::TIERING}, {1, 4}, {2, 8}, {3, 16}, {4, 32},
+                      {5, /* uint32_max */}};
+
     // Check if there is resident data
     std::vector<std::string> dir_levels{};
     utils::scanDir(data_dir, dir_levels);
@@ -44,17 +49,13 @@ KVStore::KVStore(const std::string &dir)
         }
     }
     std::sort(this->caches.begin(), this->caches.end(),
-              std::greater<decltype(this->caches)::value_type>{});
-    if (!this->caches.empty()) {
-        this->cur_ts = this->caches[0].header.time_stamp + 1;
-        mtb_ptr = std::make_unique<mtb_type>(this->cur_ts);
-    } else {
+              std::less<decltype(this->caches)::value_type>{});
+    if (this->caches.empty()) {
         mtb_ptr = std::make_unique<mtb_type>(1);
+    } else {
+        this->cur_ts = this->caches.back().header.time_stamp + 1;
+        mtb_ptr = std::make_unique<mtb_type>(this->cur_ts);
     }
-
-    // Hard-coded configuration
-    this->strategy = {{0, 2, level_type::TIERING}, {1, 4}, {2, 8}, {3, 16}, {4, 32},
-                      {5, /* uint32_max */}};
 }
 
 KVStore::~KVStore() {
@@ -86,7 +87,9 @@ std::string KVStore::get(uint64_t key) {
         }
         return mtb_get_res.first;
     }
-    for (auto &cache : caches) {
+    // The cache list is ordered in ascending order (respect to the timestamp)
+    for (auto it = caches.rbegin(); it != caches.rend(); ++it) {
+        const auto &cache = *it;
         lsm::offset_type offset;
         bool flag;
         std::tie(offset, flag) = cache.search(key);
@@ -113,7 +116,8 @@ bool KVStore::del(uint64_t key) {
         this->mtb_ptr->put(key, KVStore::DeleteNote);
         return true;
     }
-    for (auto &cache : caches) {
+    for (auto it = caches.rbegin(); it != caches.rend(); ++it) {
+        const auto &cache = *it;
         lsm::offset_type offset;
         bool flag;
         std::tie(offset, flag) = cache.search(key);
@@ -170,27 +174,29 @@ void KVStore::handle_sst() {
 
     const std::string target_dir = this->data_dir + "/level-0";
     if (utils::mkdir(target_dir.c_str()) != 0) {
+        // TODO do not throw an exception
         throw std::runtime_error{"Cannot create directory " + target_dir};
     }
 
     auto cache = mtb_ptr->to_binary(target_dir + "/" + sst_name, 0);
-    this->caches.emplace(this->caches.begin(), std::move(cache));
+    this->caches.push_back(std::move(cache));
 
     // Reset the memory table.
     mtb_ptr = std::make_unique<mtb_type>(++this->cur_ts);
 
     // Recursively check each level
-    check_level(0);
+    // check_level(0); // TODO enable this
 }
 
 void KVStore::check_level(int level) {
-    assert(level < strategy.size()); // The strategy generated method ensures this.
+    assert(level < strategy.size());  // The strategy generated method ensures this.
     if (level >= strategy.size()) {
         return;
     }
-    std::vector<std::string> files;
-    utils::scanDir(data_dir + "/level-" + std::to_string(level), files);
-    if (files.size() <= strategy[level].max_file) {
+    auto file_count = std::count_if(
+        caches.begin(), caches.end(),
+        [=](const sst::sst_cache &cache) -> bool { return cache.level == level; });
+    if (file_count <= strategy[level].max_file) {
         return;
     }
     compact(level, level + 1);
@@ -199,6 +205,38 @@ void KVStore::check_level(int level) {
 
 void KVStore::compact(int l1, int l2) {
     // TODO compaction
+    // Step 1: SSTable select
+
+    // 1.1 select from level l1
+    key_type l1_min_key = std::numeric_limits<key_type>::max();
+    key_type l1_max_key = std::numeric_limits<key_type>::min();
+    std::vector<sst::sst_cache> lhs_selected_cache{};
+    // Tiering: select all
+    uint32_t lhs_selected_cnt = std::count_if(
+        caches.begin(), caches.end(),
+        [=](const sst::sst_cache &cache) -> bool { return cache.level == l1; });
+    // Leveling: truncate
+    if (strategy[l1].type == level_type::LEVELING) {
+        lhs_selected_cnt -= strategy[l1].max_file;
+    }
+
+    lhs_selected_cache.reserve(lhs_selected_cnt);
+    for (auto it = caches.begin();
+         it != caches.end() && lhs_selected_cache.size() < lhs_selected_cnt;) {
+        if (it->level == l1) {
+            l1_max_key = std::max(it->header.upper, l1_max_key);
+            l1_min_key = std::min(it->header.lower, l1_min_key);
+            lhs_selected_cache.push_back(std::move(*it));
+            it = caches.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    assert(lhs_selected_cache.size() == lhs_selected_cnt);
+
+    // 1.2 select from level l2
+
+
 }
 
 std::string KVStore::generate_hash() {
