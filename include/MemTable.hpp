@@ -20,10 +20,10 @@ public:
     using offset_type = lsm::offset_type;
 
     explicit MemTable()
-        : _time_stamp(1), _count(0), _range{1, 0}, _byte(HEADER_SIZE + lsm::BLF_SIZE) {}
+        : _time_stamp(1), _count(0), _byte(HEADER_SIZE + lsm::BLF_SIZE) {}
 
     explicit MemTable(uint64_t ts)
-        : _time_stamp(ts), _count(0), _range{1, 0}, _byte(HEADER_SIZE + lsm::BLF_SIZE) {}
+        : _time_stamp(ts), _count(0), _byte(HEADER_SIZE + lsm::BLF_SIZE) {}
 
     ~MemTable() = default;  // nothing todo
 
@@ -36,17 +36,19 @@ public:
             };
         }
 
+        auto kv_list = this->dst.get_kv();
+        std::pair<uint64_t, uint64_t> range{kv_list.front().first, kv_list.back().first};
+
         // Write the header
         bin_out
             .write(reinterpret_cast<const char *>(&this->_time_stamp),
                    sizeof this->_time_stamp)
             .write(reinterpret_cast<const char *>(&this->_count), sizeof this->_count)
-            .write(reinterpret_cast<const char *>(&this->_range), sizeof this->_range);
+            .write(reinterpret_cast<const char *>(&range), sizeof range);
 
         // Write the bloom filter
         bin_out << this->bft;
 
-        auto kv_list = this->dst.get_kv();
 
         // The below implements are value_type-dependent
 
@@ -70,7 +72,7 @@ public:
 
         return {
             level,
-            {this->_time_stamp, this->_count, this->_range.first, this->_range.second},
+            {this->_time_stamp, this->_count, range.first, range.second},
             this->bft,
             std::move(indices),
             {bin_name}};
@@ -83,24 +85,11 @@ public:
         bool is_inserted = dst.insert_or_assign(key, val).second;
         bft.insert(key);
 
-        // Update range
-        if (_range.first > _range.second) {
-            // The first key to insert, or not initialized yet.
-            _range = std::make_pair(key, key);
-        } else {
-            _range.first = std::min(_range.first, key);
-            _range.second = std::max(_range.second, key);
-        }
-
         // Update byte
         this->_byte = future_size;
 
         // Update count
         this->_count += static_cast<int>(is_inserted);
-    }
-
-    std::pair<key_type, key_type> range() const noexcept {
-        return this->_range;
     }
 
     size_type byte_size() const noexcept {
@@ -116,9 +105,12 @@ public:
         return this->_byte + MemTable::predict_update_size(key, val, get_result.first);
     }
 
-    bool in_range(const key_type &key) const noexcept {
-        return key <= _range.second && key >= _range.first;
+    bool in_range(key_type key) const noexcept {
+        key_type upper, lower;
+        std::tie(lower, upper) = dst.get_range();
+        return lower <= key && key <= upper;
     }
+
 
     /**
      * @brief Get the value from the memory table.
@@ -150,7 +142,6 @@ private:
     /** 32 bytes in the header */
     uint64_t _time_stamp;
     uint64_t _count;
-    std::pair<key_type, key_type> _range;
 
     /** Size in byte (when stored as sst) */
     size_type _byte;

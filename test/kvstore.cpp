@@ -11,21 +11,29 @@ void print_cache(const sst::sst_cache &cache) {
 
 struct TestKVStore {
     KVStore kv;
-    TestKVStore(const std::string& str) : kv{str} {}
+    TestKVStore(const std::string &str) : kv{str} {
+        kv.reset();
+    }
     ~TestKVStore() {kv.reset();}
-    void put(const lsm::key_type& key, const lsm::value_type& value) {
+    void put(const lsm::key_type &key, const lsm::value_type &value) {
         kv.put(key, value);
     }
-    lsm::value_type get(const lsm::key_type& key) {
+    lsm::value_type get(const lsm::key_type &key) {
         return kv.get(key);
     }
+    bool del(const lsm::key_type &key) {
+        return kv.del(key);
+    }
 };
+
+#define TEST
 
 int main() {
     std::vector<std::string> data{"sssssssssssssssssssssssssssss", "hhhhhhhhhhhhhhhhhhhhhhh",
                                   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaa"};
     TestKVStore kv{"./data"};
     std::map<lsm::key_type, lsm::value_type> mp;
+#ifdef TEST
     for (int i = 0; i < 10000; ++i) {
         kv.put(i, data[0]);
         mp[i] = data[0];
@@ -38,12 +46,22 @@ int main() {
         kv.put(i, data[2]);
         mp[i] = data[2];
     }
-    for (int i = 10; i < 444444; i += 2) {
+    for (int i = 10; i < 444144; i += 2) {
         kv.put(i, data[0] + data[1]);
         mp[i] = data[0] + data[1];
     }
 
-    for (auto value : mp) {
+    for (const auto &value : mp) {
+        TestEqual(kv.get(value.first), value.second);
+    }
+
+    for (int i = 999; i < 123123; ++i) {
+        kv.del(i);
+        mp.erase(i);
+    }
+#endif
+
+    for (const auto &value : mp) {
         TestEqual(kv.get(value.first), value.second);
     }
 

@@ -3,12 +3,26 @@
 
 #include <fstream>
 #include <memory>
+#include <random>
+#include <sstream>
 #include <vector>
 
 #include "BloomFilter.hpp"
 #include "types.hpp"
+#include "utils.h"
 
 namespace sst {
+
+inline static std::string generate_hash() {
+    static std::random_device random_device{};
+    static std::mt19937 engine{random_device()};
+    static std::uniform_int_distribution<> dist(0, 0xFFFFFF);
+
+    uint32_t random_number = dist(engine);
+    std::stringstream ss{};
+    ss << std::setw(6) << std::setfill('0') << std::hex << random_number;
+    return ss.str();
+}
 
 // Cache for sst files, stored in the memory.
 // It's an aggregate, moveable type.
@@ -138,6 +152,110 @@ inline sst_cache read_sst(const std::string &sst_path, int level) {
     // return res;
 }
 
+struct sst_buffer {
+    using key_type = lsm::key_type;
+    using value_type = lsm::value_type;
+    using kv_type = std::pair<key_type, value_type>;
+
+    std::vector<kv_type> kv_list;
+    lsm::size_type byte_size;
+    uint64_t timestamp;
+    std::string target_dir;
+    int level;
+
+    sst_buffer(uint64_t _timestamp, const std::string &_dir)
+        : byte_size(32 + lsm::BLF_SIZE),
+          timestamp(_timestamp),
+          target_dir(_dir),
+          level(std::stoi(_dir.substr(target_dir.find('-') + 1))) {
+        if (utils::mkdir(target_dir.c_str()) != 0) {
+            throw std::runtime_error{"Cannot create directory " + target_dir};
+        }
+    }
+
+    // I'd like to use unique_ptr. However, copy elision isn't mandatory in C++14.
+    sst_cache *append(key_type key, value_type value) {
+        auto tmp_size = this->byte_size + sizeof(key_type) + sizeof(lsm::offset_type) +
+                        (value.length() + 1) * sizeof(char);
+        if (tmp_size <= lsm::MTB_MAXSIZE) {
+            this->byte_size = tmp_size;
+            kv_list.emplace_back(key, value);
+            return nullptr;
+        }
+
+        auto *cache_ptr = to_binary();
+
+        this->byte_size +=
+            sizeof(key_type) + sizeof(lsm::offset_type) + (value.length() + 1) * sizeof(char);
+        this->kv_list = {{key, value}};
+
+        return cache_ptr;
+    }
+
+    sst_cache *clear() {
+        if (this->kv_list.empty()) {
+            return nullptr;
+        }
+        return to_binary();
+    }
+
+private:
+    // Will clear the kv_list and reset byte_size.
+    sst_cache *to_binary() {
+        basic_ds::BloomFilter<lsm::BLF_SIZE> bft;
+        for (const auto &kv : kv_list) {
+            bft.insert(kv.first);
+        }
+
+        std::string bin_name = target_dir + '/' + generate_hash() + ".sst";
+
+        std::ofstream bin_out{bin_name, std::ios::binary};  // Trunc
+        if (!bin_out) {
+            throw std::runtime_error{"Cannot write sst " + bin_name +
+                                     ". Please check if the directory exists."};
+        }
+
+        std::pair<uint64_t, uint64_t> range{kv_list.front().first, kv_list.back().first};
+        uint64_t count = kv_list.size();
+
+        // Write the header
+        bin_out.write(reinterpret_cast<const char *>(&timestamp), sizeof timestamp)
+            .write(reinterpret_cast<const char *>(&count), sizeof count)
+            .write(reinterpret_cast<const char *>(&range), sizeof range);
+
+        // Write the bloom filter
+        bin_out << bft;
+
+        // The below implements are value_type-dependent
+
+        // Write the index table
+        decltype(sst::sst_cache{}.indices) indices;
+        indices.reserve(count);
+
+        lsm::offset_type offset =
+            32 + lsm::BLF_SIZE + count * (sizeof(key_type) + sizeof(lsm::offset_type));
+        for (kv_type &kv : kv_list) {
+            bin_out.write(reinterpret_cast<const char *>(&kv.first), sizeof(key_type))
+                .write(reinterpret_cast<const char *>(&offset), sizeof(lsm::offset_type));
+            indices.emplace_back(kv.first, offset);
+            offset += kv.second.length() + 1;  // null-terminated
+        }
+
+        // Write the value data
+        for (kv_type &kv : kv_list) {
+            bin_out.write(kv.second.c_str(), kv.second.length() + 1);
+        }
+
+        this->byte_size = 32 + lsm::BLF_SIZE;
+
+        return new sst_cache{level,
+                             {timestamp, count, range.first, range.second},
+                             std::move(bft),
+                             std::move(indices),
+                             {bin_name}};
+    }
+};
+
 /**
  * @brief Merge sort multiple sst files. This function will delete all the referred ssts,
  *        and write at least several ssts into the target level.
@@ -145,10 +263,71 @@ inline sst_cache read_sst(const std::string &sst_path, int level) {
  * @param level the target level where the compacted ssts are put into.
  * @return std::vector<sst::sst_cache> the caches associated with newly-created ssts.
  */
-inline std::vector<sst::sst_cache> sort_and_merge(const std::vector<sst::sst_cache> &cache_list,
-                                                  int level) {
+inline std::vector<sst_cache> sort_and_merge(std::vector<sst_cache> &cache_list,
+                                             std::string target_dir) {
     // TODO
-    return {};
+    static auto is_valid = [](const sst_cache &cache) -> bool {
+        return cache.header.count > 0 && cache.level >= 0;
+    };
+    for (auto it = cache_list.begin(); it != cache_list.end();) {
+        if (!is_valid(*it)) {
+            it = cache_list.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    // Precede the cache with bigger timestamp
+    std::sort(cache_list.begin(), cache_list.end(), std::greater<sst_cache>{});
+    uint64_t timestamp = cache_list.front().header.time_stamp;
+    sst_buffer buffer{timestamp, target_dir};
+
+    std::vector<std::size_t> p(cache_list.size(), 0);
+
+    auto key_to_select = [&](std::size_t i) -> lsm::key_type {
+        return cache_list.at(i).indices.at(p.at(i)).first;
+    };
+
+    auto remove_cache = [&](std::size_t i) -> void {
+        utils::rmfile(cache_list.at(i).sst_path.c_str());
+        cache_list.erase(cache_list.begin() + i);
+        p.erase(p.begin() + i);
+    };
+
+    std::vector<sst_cache> res{};
+
+    while (!cache_list.empty()) {
+        std::size_t selected = 0;
+        auto selected_key = key_to_select(selected);
+        for (std::size_t i = 1; i < cache_list.size(); ++i) {
+            auto tmp = key_to_select(i);
+            if (tmp == selected_key && ++p[i] == cache_list.at(i).header.count) {
+                remove_cache(i--);
+            } else if (tmp < selected_key) {
+                selected_key = tmp;
+                selected = i;
+            }
+        }
+        auto &selected_cache = cache_list.at(selected);
+        auto offset = selected_cache.indices.at(p[selected]).second;
+        lsm::value_type to_append_value = selected_cache.from_offset(offset);
+        if (to_append_value != lsm::DeleteNote) {
+            auto cache_ptr = buffer.append(selected_key, to_append_value);
+            if (cache_ptr) {
+                res.push_back(std::move(*cache_ptr));
+                delete cache_ptr;
+            }
+        }
+        if (++p[selected] == selected_cache.header.count) {
+            remove_cache(selected);
+        }
+    }
+    // Clear the resident kv
+    auto cache_ptr = buffer.clear();
+    if (cache_ptr) {
+        res.push_back(std::move(*cache_ptr));
+        delete cache_ptr;
+    }
+    return res;
 }
 
 }  // namespace sst

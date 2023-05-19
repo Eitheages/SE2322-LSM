@@ -9,8 +9,7 @@
  */
 #include <algorithm>
 #include <iomanip>
-#include <random>
-#include <sstream>
+#include <iostream>
 
 #include "../include/kvstore.h"
 #include "../include/utils.h"
@@ -159,7 +158,7 @@ void KVStore::scan(uint64_t key1, uint64_t key2,
 
 void KVStore::handle_sst() {
     // Write the memory table to level-0
-    std::string sst_name = KVStore::generate_hash() + ".sst";
+    std::string sst_name = sst::generate_hash() + ".sst";
 
     const std::string target_dir = this->data_dir + "/level-0";
     utils::mkdir(target_dir.c_str());
@@ -175,7 +174,7 @@ void KVStore::handle_sst() {
     mtb_ptr = std::make_unique<mtb_type>(++this->cur_ts);
 
     // Recursively check each level
-    // check_level(0); // TODO enable this
+    check_level(0);
 }
 
 void KVStore::check_level(int level) {
@@ -227,8 +226,8 @@ void KVStore::compact(int l1, int l2) {
             min_key = std::min(min_key, cache.header.lower);
             max_key = std::max(max_key, cache.header.upper);
         }
-        auto if_select = [&](const sst::sst_cache &cache) -> bool {
-            return cache.header.lower > max_key || cache.header.upper < min_key;
+        auto if_select = [&, l2](const sst::sst_cache &cache) -> bool {
+            return cache.level == l2 && (cache.header.lower > max_key || cache.header.upper < min_key);
         };
         for (auto it = caches.begin(); it != caches.end();) {
             if (if_select(*it)) {
@@ -241,22 +240,12 @@ void KVStore::compact(int l1, int l2) {
             }
         }
     }
-
     // Step 2: merge sort
-    std::vector<sst::sst_cache> merged_cache = sst::sort_and_merge(selected_cache, l2);
-    this->caches.insert(caches.end(), std::make_move_iterator(merged_cache.begin()), std::make_move_iterator(merged_cache.end()));
-}
-
-std::string KVStore::generate_hash() {
-    // The generator is managed by the same template class.
-    static std::random_device random_device{};
-    static std::mt19937 engine{random_device()};
-    static std::uniform_int_distribution<> dist(0, 0xFFFFFF);
-
-    uint32_t random_number = dist(engine);
-    std::stringstream ss{};
-    ss << std::setw(6) << std::setfill('0') << std::hex << random_number;
-    return ss.str();
+    std::string target_dir = this->data_dir + "/level-" + std::to_string(l2);
+    std::vector<sst::sst_cache> merged_cache = sst::sort_and_merge(selected_cache, target_dir);
+    this->caches.insert(caches.end(), std::make_move_iterator(merged_cache.begin()),
+                        std::make_move_iterator(merged_cache.end()));
+    std::sort(caches.begin(), caches.end());
 }
 
 const typename KVStore::value_type KVStore::DeleteNote{"~DELETED~"};

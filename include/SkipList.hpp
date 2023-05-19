@@ -114,6 +114,13 @@ public:
         return res;
     }
 
+    std::pair<key_type, key_type> get_range() const noexcept {
+        if (head[0] == tail[0]) {
+            return {1, 0};
+        }
+        return {head[0]->_next->key, tail[0]->_pre->key};
+    }
+
 private:
     static constexpr size_type MAX_LEVEL = std::numeric_limits<size_type>::max();
     static constexpr key_type MAX_KEY = std::numeric_limits<key_type>::max();

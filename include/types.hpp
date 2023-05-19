@@ -13,6 +13,7 @@ using offset_type = uint32_t;
 
 constexpr size_type BLF_SIZE = 10240;
 constexpr size_type MTB_MAXSIZE = 2 * 1024 * 1024; /* 2 MB */
+const std::string DeleteNote = "~DELETED~";
 };                                                 // namespace lsm
 
 #endif
