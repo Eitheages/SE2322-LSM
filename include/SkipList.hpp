@@ -4,6 +4,8 @@
 #include <cassert>
 #include <type_traits>
 #include <vector>
+#include <limits>
+#include <ctime>
 
 namespace basic_ds {
 using size_type = std::size_t;
@@ -37,7 +39,7 @@ public:
     using kv_type = std::pair<key_type, value_type>;
 
     explicit SkipList() : h{0} {
-        std::srand(std::time(nullptr));
+        std::srand(time(nullptr));
         head.push_back(new Node(MIN_KEY, value_type{}));
         tail.push_back(new Node(MAX_KEY, value_type{}));
         head[0]->_next = tail[0];
@@ -136,7 +138,7 @@ private:
         return SkipList::randLevel(BOUND, MAX_LEVEL);
     }
     inline static int randLevel(int upper, size_type levelMax) noexcept {
-        int level = 0;
+        size_type level = 0;
         while ((rand() & 0xFFFF) < upper) {
             ++level;
         }

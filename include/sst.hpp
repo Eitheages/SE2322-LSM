@@ -77,6 +77,22 @@ struct sst_cache {
     bool operator>(const sst_cache &rhs) const {
         return rhs < *this;
     }
+
+    std::vector<kv_type> get_kv() const {
+        std::vector<kv_type> kv_list{};
+        kv_list.reserve(this->header.count);
+        std::ifstream in{sst_path};
+        if (!in) {
+            throw std::runtime_error{"Cannot open sst file " + sst_path};
+        }
+        in.seekg(this->indices[0].second);
+        for (const auto &index : indices) {
+            std::string buffer;
+            std::getline(in, buffer, '\0');
+            kv_list.emplace_back(index.first, std::move(buffer));
+        }
+        return kv_list;
+    }
 };
 
 // A wrapper structure to read from sst files.
@@ -202,6 +218,11 @@ struct sst_buffer {
 private:
     // Will clear the kv_list and reset byte_size.
     sst_cache *to_binary() {
+        // bool flag = std::is_sorted(
+        //     kv_list.begin(), kv_list.end(),
+        //     [](const kv_type &kv1, const kv_type &kv2) -> bool { return kv1.first < kv2.first; });
+        // assert(flag);
+
         basic_ds::BloomFilter<lsm::BLF_SIZE> bft;
         for (const auto &kv : kv_list) {
             bft.insert(kv.first);
@@ -263,63 +284,59 @@ private:
  * @param level the target level where the compacted ssts are put into.
  * @return std::vector<sst::sst_cache> the caches associated with newly-created ssts.
  */
-inline std::vector<sst_cache> sort_and_merge(std::vector<sst_cache> &cache_list,
-                                             std::string target_dir) {
-    // TODO
-    static auto is_valid = [](const sst_cache &cache) -> bool {
-        return cache.header.count > 0 && cache.level >= 0;
-    };
-    for (auto it = cache_list.begin(); it != cache_list.end();) {
-        if (!is_valid(*it)) {
-            it = cache_list.erase(it);
-        } else {
-            ++it;
-        }
-    }
-    // Precede the cache with bigger timestamp
-    std::sort(cache_list.begin(), cache_list.end(), std::greater<sst_cache>{});
+inline std::vector<sst_cache> sort_and_merge(const std::vector<sst_cache> &cache_list,
+                                             std::string target_dir, bool is_last = false) {
+    using kv_type = std::pair<lsm::key_type, lsm::value_type>;
+
     uint64_t timestamp = cache_list.front().header.time_stamp;
     sst_buffer buffer{timestamp, target_dir};
 
-    std::vector<std::size_t> p(cache_list.size(), 0);
+    const std::size_t N = cache_list.size();
+    std::vector<std::vector<kv_type>> kv_list;
+    kv_list.reserve(N);
+
+    for (std::size_t i = 0; i < N; ++i) {
+        kv_list.push_back(cache_list[i].get_kv());
+        utils::rmfile(cache_list.at(i).sst_path.c_str());
+    }
+
+    std::vector<std::size_t> p(N, 0);
 
     auto key_to_select = [&](std::size_t i) -> lsm::key_type {
-        return cache_list.at(i).indices.at(p.at(i)).first;
+        return kv_list.at(i).at(p.at(i)).first;
     };
 
     auto remove_cache = [&](std::size_t i) -> void {
-        utils::rmfile(cache_list.at(i).sst_path.c_str());
-        cache_list.erase(cache_list.begin() + i);
-        p.erase(p.begin() + i);
+        if (++p[i] == kv_list.at(i).size()) {
+            kv_list.erase(kv_list.begin() + i);
+            p.erase(p.begin() + i);
+        }
     };
 
     std::vector<sst_cache> res{};
 
-    while (!cache_list.empty()) {
+    while (!p.empty()) {
         std::size_t selected = 0;
         auto selected_key = key_to_select(selected);
-        for (std::size_t i = 1; i < cache_list.size(); ++i) {
+        for (std::size_t i = 1; i < p.size(); ++i) {
             auto tmp = key_to_select(i);
-            if (tmp == selected_key && ++p[i] == cache_list.at(i).header.count) {
+            if (tmp == selected_key) {
                 remove_cache(i--);
             } else if (tmp < selected_key) {
                 selected_key = tmp;
                 selected = i;
             }
         }
-        auto &selected_cache = cache_list.at(selected);
-        auto offset = selected_cache.indices.at(p[selected]).second;
-        lsm::value_type to_append_value = selected_cache.from_offset(offset);
-        if (to_append_value != lsm::DeleteNote) {
+        auto &selected_kv_list = kv_list.at(selected);
+        lsm::value_type to_append_value = selected_kv_list.at(p.at(selected)).second;
+        if (!is_last || to_append_value != lsm::DeleteNote) {
             auto cache_ptr = buffer.append(selected_key, to_append_value);
             if (cache_ptr) {
                 res.push_back(std::move(*cache_ptr));
                 delete cache_ptr;
             }
         }
-        if (++p[selected] == selected_cache.header.count) {
-            remove_cache(selected);
-        }
+        remove_cache(selected);
     }
     // Clear the resident kv
     auto cache_ptr = buffer.clear();

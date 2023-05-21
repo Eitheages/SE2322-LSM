@@ -9,7 +9,6 @@
  */
 #include <algorithm>
 #include <iomanip>
-#include <iostream>
 
 #include "../include/kvstore.h"
 #include "../include/utils.h"
@@ -74,6 +73,7 @@ std::string KVStore::get(uint64_t key) {
     auto mtb_get_res = mtb_ptr->get(key);
     if (mtb_get_res.second) {
         if (mtb_get_res.first == KVStore::DeleteNote) {
+            // Already deleted
             return {};
         }
         return mtb_get_res.first;
@@ -99,9 +99,11 @@ std::string KVStore::get(uint64_t key) {
  * Returns false iff the key is not found.
  */
 bool KVStore::del(uint64_t key) {
-    auto mtb_get_res = mtb_ptr->get(key);
-    if (mtb_get_res.second) {
-        if (mtb_get_res.first == KVStore::DeleteNote) {
+    value_type val;
+    bool found;
+    std::tie(val, found) = mtb_ptr->get(key);
+    if (found) {
+        if (val == KVStore::DeleteNote) {
             return false;
         }
         this->mtb_ptr->put(key, KVStore::DeleteNote);
@@ -154,7 +156,13 @@ void KVStore::reset() {
  * An empty string indicates not found.
  */
 void KVStore::scan(uint64_t key1, uint64_t key2,
-                   std::list<std::pair<uint64_t, std::string>> &list) {}
+                   std::list<std::pair<uint64_t, std::string>> &list) {
+    // using pair_type = std::remove_reference_t<decltype(caches.at(0).indices)>::value_type;
+    // TODO this implement has problems of efficiency.
+    for (; key1 <= key2; ++key1) {
+        list.emplace_back(key1, get(key1));
+    }
+}
 
 void KVStore::handle_sst() {
     // Write the memory table to level-0
@@ -227,7 +235,8 @@ void KVStore::compact(int l1, int l2) {
             max_key = std::max(max_key, cache.header.upper);
         }
         auto if_select = [&, l2](const sst::sst_cache &cache) -> bool {
-            return cache.level == l2 && (cache.header.lower > max_key || cache.header.upper < min_key);
+            return cache.level == l2 &&
+                   !(cache.header.lower > max_key || cache.header.upper < min_key);
         };
         for (auto it = caches.begin(); it != caches.end();) {
             if (if_select(*it)) {
@@ -240,9 +249,24 @@ void KVStore::compact(int l1, int l2) {
             }
         }
     }
+    static auto is_valid = [](const sst::sst_cache &cache) -> bool {
+        return cache.header.count > 0 && cache.level >= 0;
+    };
+    for (auto it = selected_cache.begin(); it != selected_cache.end();) {
+        if (!is_valid(*it)) {
+            utils::rmfile(it->sst_path.c_str());
+            it = selected_cache.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    // Precede the cache with bigger timestamp
+    std::sort(selected_cache.begin(), selected_cache.end(), std::greater<sst::sst_cache>{});
+
     // Step 2: merge sort
     std::string target_dir = this->data_dir + "/level-" + std::to_string(l2);
-    std::vector<sst::sst_cache> merged_cache = sst::sort_and_merge(selected_cache, target_dir);
+    std::vector<sst::sst_cache> merged_cache =
+        sst::sort_and_merge(selected_cache, target_dir, l2 == strategy.size());
     this->caches.insert(caches.end(), std::make_move_iterator(merged_cache.begin()),
                         std::make_move_iterator(merged_cache.end()));
     std::sort(caches.begin(), caches.end());
