@@ -69,9 +69,14 @@ struct sst_cache {
     }
 
     bool operator<(const sst_cache &rhs) const {
-        return (this->header.time_stamp < rhs.header.time_stamp) ||
-               (this->header.time_stamp == rhs.header.time_stamp &&
-                this->header.count < rhs.header.count);
+        if (this->header.time_stamp < rhs.header.time_stamp) {
+            return true;
+        } else if (this->header.time_stamp == rhs.header.time_stamp) {
+            auto level1 = std::stoi(this->sst_path.substr(sst_path.find('-') + 1));
+            auto level2 = std::stoi(rhs.sst_path.substr(rhs.sst_path.find('-') + 1));
+            return level1 > level2 || (level1 == level2 && this->header.count < rhs.header.count);
+        }
+        return false;
     }
 
     bool operator>(const sst_cache &rhs) const {
