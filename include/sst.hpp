@@ -3,11 +3,11 @@
 
 #include <algorithm>
 #include <fstream>
+#include <iomanip>
 #include <memory>
 #include <random>
 #include <sstream>
 #include <vector>
-#include <iomanip>
 
 #include "BloomFilter.hpp"
 #include "types.hpp"
@@ -48,7 +48,7 @@ struct sst_cache {
 
     // Read the associated sst file and return the value from offset.
     value_type from_offset(offset_type offset) const {
-        std::ifstream in{sst_path};
+        std::ifstream in{sst_path, std::ios::binary};
         in.seekg(offset, std::ios::beg);
         std::string str;
         for (char c; (in >> c) && c;) {
@@ -89,7 +89,7 @@ struct sst_cache {
     std::vector<kv_type> get_kv() const {
         std::vector<kv_type> kv_list{};
         kv_list.reserve(this->header.count);
-        std::ifstream in{sst_path};
+        std::ifstream in{sst_path, std::ios::binary};
         if (!in) {
             throw std::runtime_error{"Cannot open sst file " + sst_path};
         }
@@ -120,16 +120,17 @@ struct sst_reader {
     sst_reader(sst_reader &&) = delete;
     sst_reader(const sst_reader &) = delete;
     explicit sst_reader(const char *sst_name) : is_success(false) {
-        std::ifstream in{sst_name};
+        std::ifstream in{sst_name, std::ios::binary};
         if (!in) {
             return;
         }
-        std::tuple<uint64_t, uint64_t, uint64_t, uint64_t> header;
-        in.read(reinterpret_cast<char *>(&header), 32);
+        in.read(reinterpret_cast<char *>(&time_stamp), 8)
+            .read(reinterpret_cast<char *>(&count), 8)
+            .read(reinterpret_cast<char *>(&lower), 8)
+            .read(reinterpret_cast<char *>(&upper), 8);
         if (!in.good()) {
             return;
         }
-        std::tie(time_stamp, count, lower, upper) = header;
         in >> bft;
         if (!in.good()) {
             return;
