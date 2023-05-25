@@ -1,6 +1,7 @@
 #ifndef SST_UTILS
 #define SST_UTILS
 
+#include <algorithm>
 #include <fstream>
 #include <memory>
 #include <random>
