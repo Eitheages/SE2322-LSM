@@ -4,6 +4,8 @@ add_custom_target(make_data_dir ALL COMMAND ${CMAKE_COMMAND} -E make_directory d
 
 add_compile_options(-O3)
 
+add_subdirectory(myTest)
+
 add_executable(test_bft bloom_filter.cpp)
 add_executable(test_sl skip_list.cpp)
 add_executable(test_mtb memory_table.cpp)

@@ -69,14 +69,17 @@ struct sst_cache {
     }
 
     bool operator<(const sst_cache &rhs) const {
-        if (this->header.time_stamp < rhs.header.time_stamp) {
-            return true;
-        } else if (this->header.time_stamp == rhs.header.time_stamp) {
-            auto level1 = std::stoi(this->sst_path.substr(sst_path.find('-') + 1));
-            auto level2 = std::stoi(rhs.sst_path.substr(rhs.sst_path.find('-') + 1));
-            return level1 > level2 || (level1 == level2 && this->header.count < rhs.header.count);
-        }
-        return false;
+        // if (this->header.time_stamp < rhs.header.time_stamp) {
+        //     return true;
+        // } else if (this->header.time_stamp == rhs.header.time_stamp) {
+        //     auto level1 = std::stoi(this->sst_path.substr(sst_path.find('-') + 1));
+        //     auto level2 = std::stoi(rhs.sst_path.substr(rhs.sst_path.find('-') + 1));
+        //     return level1 > level2 || (level1 == level2 && this->header.count < rhs.header.count);
+        // }
+        // return false;
+        // Sort strategy: precede deeper level, smaller timestamp, smaller count.
+        return std::tie(rhs.level, this->header.time_stamp, this->header.count) <
+               std::tie(this->level, rhs.header.time_stamp, rhs.header.count);
     }
 
     bool operator>(const sst_cache &rhs) const {
@@ -164,13 +167,6 @@ inline sst_cache read_sst(const std::string &sst_path, int level) {
             std::move(sr.bft),
             std::move(sr.indices),
             std::move(sst_path)};
-    // sst_cache res;
-    // res.indices = std::move(sr.indices);
-    // res.header = {sr.time_stamp, sr.count, sr.lower, sr.upper};
-    // res.level = level;
-    // res.sst_path = sst_path;
-    // std::swap(res.bft, sr.bft);
-    // return res;
 }
 
 struct sst_buffer {
@@ -223,10 +219,12 @@ struct sst_buffer {
 private:
     // Will clear the kv_list and reset byte_size.
     sst_cache *to_binary() {
-        // bool flag = std::is_sorted(
-        //     kv_list.begin(), kv_list.end(),
-        //     [](const kv_type &kv1, const kv_type &kv2) -> bool { return kv1.first < kv2.first; });
-        // assert(flag);
+#ifndef NDEBUG
+        bool flag = std::is_sorted(
+            kv_list.begin(), kv_list.end(),
+            [](const kv_type &kv1, const kv_type &kv2) -> bool { return kv1.first < kv2.first; });
+        assert(flag);
+#endif
 
         basic_ds::BloomFilter<lsm::BLF_SIZE> bft;
         for (const auto &kv : kv_list) {

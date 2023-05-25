@@ -10,8 +10,8 @@
 #include <algorithm>
 #include <iomanip>
 
-#include "../include/kvstore.h"
-#include "../include/utils.h"
+#include "kvstore.h"
+#include "utils.h"
 
 KVStore::KVStore(const std::string &dir)
     : KVStoreAPI(dir), data_dir{dir}, cur_ts{1}, mtb_ptr{nullptr} {
@@ -78,7 +78,8 @@ std::string KVStore::get(uint64_t key) {
         }
         return mtb_get_res.first;
     }
-    // The cache list is ordered in ascending order (respect to the timestamp)
+    assert(std::is_sorted(caches.begin(), caches.end(), std::less<sst::sst_cache>{}));
+    // The cache list is ordered in ascending order, see sst::sst_cache::operator<
     for (auto it = caches.rbegin(); it != caches.rend(); ++it) {
         const auto &cache = *it;
         lsm::offset_type offset;
@@ -216,7 +217,7 @@ void KVStore::compact(int l1, int l2) {
 
     selected_cache.reserve(lhs_selected_cnt);
     for (auto it = caches.begin();
-         it != caches.end() && selected_cache.size() < lhs_selected_cnt;) {
+         it != caches.end() && selected_cache.size() < lhs_selected_cnt && it->level >= l1;) {
         if (it->level == l1) {
             selected_cache.push_back(std::move(*it));
             it = caches.erase(it);
@@ -238,7 +239,7 @@ void KVStore::compact(int l1, int l2) {
             return cache.level == l2 &&
                    !(cache.header.lower > max_key || cache.header.upper < min_key);
         };
-        for (auto it = caches.begin(); it != caches.end();) {
+        for (auto it = caches.begin(); it != caches.end() && it->level >= l2;) {
             if (if_select(*it)) {
                 max_key = std::max(max_key, it->header.upper);
                 min_key = std::min(min_key, it->header.lower);
