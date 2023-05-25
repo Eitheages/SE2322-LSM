@@ -6,6 +6,7 @@
 #include <random>
 #include <sstream>
 #include <vector>
+#include <iomanip>
 
 #include "BloomFilter.hpp"
 #include "types.hpp"

@@ -6,6 +6,8 @@
 #include <vector>
 #include <limits>
 #include <ctime>
+#include <cstdlib>
+#include <cstdint>
 
 namespace basic_ds {
 using size_type = std::size_t;
