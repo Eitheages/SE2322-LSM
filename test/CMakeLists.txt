@@ -9,7 +9,6 @@ add_subdirectory(myTest)
 add_executable(test_bft bloom_filter.cpp)
 add_executable(test_sl skip_list.cpp)
 add_executable(test_mtb memory_table.cpp)
-add_executable(test_kvstore kvstore.cpp ../src/kvstore.cc)
 add_executable(correctness correctness.cc ../src/kvstore.cc)
 
 add_test(NAME TestBft COMMAND test_bft)

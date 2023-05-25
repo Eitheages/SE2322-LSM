@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.26)
+cmake_minimum_required(VERSION 3.0)
 project(SE2322-LSM)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON) # For clangd

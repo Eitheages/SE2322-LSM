@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include "MemTable.hpp"
 #include "kvstore_api.h"
 #include "sst.hpp"
