@@ -4,7 +4,7 @@
 #include "kvstore_api.h"
 #include "sst.hpp"
 
-class KVStore : public KVStoreAPI {
+class KVStore final : public KVStoreAPI {
     // You can add your implementation here
 public:
     using key_type = uint64_t;

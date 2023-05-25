@@ -12,5 +12,3 @@ add_compile_options(-Wall)
 include(CTest)
 add_subdirectory(test)
 enable_testing()
-
-add_executable(lsm test/correctness.cc src/kvstore.cc)
