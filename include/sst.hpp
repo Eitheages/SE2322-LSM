@@ -57,9 +57,15 @@ struct sst_cache {
 
     // Search the key in indices. If found, return the offset and bool flag `true`.
     std::pair<offset_type, bool> search(key_type key) const {
+#ifdef TEST2
+        if (!(this->header.lower <= key && key <= this->header.upper)) {
+            return {0, false};
+        }
+#else
         if (!(this->header.lower <= key && key <= this->header.upper) || !this->bft.contains(key)) {
             return {0, false};
         }
+#endif
         using pair_type = decltype(indices)::value_type;
         auto it = std::lower_bound(indices.begin(), indices.end(), pair_type{key, 0});
         if (it == indices.cend() || it->first != key) {
@@ -69,15 +75,6 @@ struct sst_cache {
     }
 
     bool operator<(const sst_cache &rhs) const {
-        // if (this->header.time_stamp < rhs.header.time_stamp) {
-        //     return true;
-        // } else if (this->header.time_stamp == rhs.header.time_stamp) {
-        //     auto level1 = std::stoi(this->sst_path.substr(sst_path.find('-') + 1));
-        //     auto level2 = std::stoi(rhs.sst_path.substr(rhs.sst_path.find('-') + 1));
-        //     return level1 > level2 || (level1 == level2 && this->header.count < rhs.header.count);
-        // }
-        // return false;
-        // Sort strategy: precede deeper level, smaller timestamp, smaller count.
         return std::tie(rhs.level, this->header.time_stamp, this->header.count) <
                std::tie(this->level, rhs.header.time_stamp, rhs.header.count);
     }

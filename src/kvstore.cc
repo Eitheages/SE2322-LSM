@@ -79,6 +79,50 @@ std::string KVStore::get(uint64_t key) {
         return mtb_get_res.first;
     }
     assert(std::is_sorted(caches.begin(), caches.end(), std::less<sst::sst_cache>{}));
+#ifdef TEST1
+    std::vector<std::string> dir_list{};
+    utils::scanDir(data_dir, dir_list);
+    std::sort(dir_list.begin(), dir_list.end(),
+              [](const std::string &s1, const std::string &s2) -> bool {
+                  auto f = [](const std::string &s) -> int {
+                      return std::stoi(s.substr(s.find('-') + 1));
+                  };
+                  return f(s1) < f(s2);
+              });  // sort by level
+
+    for (const std::string &level_dir : dir_list) {
+        int level = std::stoi(level_dir.substr(level_dir.find('-') + 1));
+        std::string dir_path = data_dir + '/' + level_dir + '/';
+        std::vector<std::string> sst_list;
+        utils::scanDir(dir_path, sst_list);
+        std::vector<std::pair<uint64_t, std::string>> candidate{};
+
+        for (const auto &sst_name : sst_list) {
+            auto cache = sst::read_sst(dir_path + sst_name, level);
+            if (cache.level == -1) {
+                throw std::runtime_error{"Cannot read sst " + dir_path + sst_name};
+            }
+            lsm::offset_type offset;
+            bool flag;
+            std::tie(offset, flag) = cache.search(key);
+            if (flag) {
+                std::string res = cache.from_offset(offset);
+                if (res == KVStore::DeleteNote) {
+                    continue;
+                }
+                candidate.emplace_back(cache.header.time_stamp, res);
+            }
+        }
+        if (!candidate.empty()) {
+            using inner_type = decltype(candidate)::value_type;
+            std::sort(candidate.begin(), candidate.end(),
+                      [](const inner_type &c1, const inner_type &c2) -> bool {
+                          return c1.first > c2.first;
+                      });
+            return candidate.front().second;
+        }
+    }
+#else
     // The cache list is ordered in ascending order, see sst::sst_cache::operator<
     for (auto it = caches.rbegin(); it != caches.rend(); ++it) {
         const auto &cache = *it;
@@ -93,6 +137,7 @@ std::string KVStore::get(uint64_t key) {
             return res;
         }
     }
+#endif
     return {};
 }
 /**

@@ -20,7 +20,7 @@ public:
         kv->reset();
     }
 
-    void put(const key_type& key, const value_type& value) {
+    void put(const key_type &key, const value_type &value) {
         test::TimeRecorder recorder;
         kv->put(key, value);
         auto time = recorder.duration();
@@ -28,7 +28,18 @@ public:
         latency[0].second += time;
     }
 
-    value_type get(const key_type& key) {
+    void put(const key_type &key, const value_type &value, bool test3) {
+        test::TimeRecorder recorder;
+        kv->put(key, value);
+        auto time = recorder.duration();
+        latency[0].first++;
+        latency[0].second += time;
+        // if (time > 100)
+            std::cout << latency[0].first << '\x20' << time << '\x20' << latency[0].second
+                      << std::endl;
+    }
+
+    value_type get(const key_type &key) {
         test::TimeRecorder recorder;
         auto res = kv->get(key);
         auto time = recorder.duration();
@@ -37,7 +48,7 @@ public:
         return res;
     }
 
-    bool del(const key_type& key) {
+    bool del(const key_type &key) {
         test::TimeRecorder recorder;
         auto res = kv->del(key);
         auto time = recorder.duration();
