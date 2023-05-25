@@ -32,7 +32,12 @@ private:
     struct lsm_config {
         int level;  // Not used
         uint32_t max_file = UINT32_MAX;
+// #define PROB4
+#ifdef PROB4
+        enum level_type type = level_type::TIERING;
+#else
         enum level_type type = level_type::LEVELING;
+#endif
 
         template <typename Traits>
         friend std::basic_istream<char, Traits> &operator>>(

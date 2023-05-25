@@ -59,6 +59,7 @@ struct sst_cache {
 
     // Search the key in indices. If found, return the offset and bool flag `true`.
     std::pair<offset_type, bool> search(key_type key) const {
+// #define TEST2
 #ifdef TEST2
         if (!(this->header.lower <= key && key <= this->header.upper)) {
             return {0, false};

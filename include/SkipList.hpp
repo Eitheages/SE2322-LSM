@@ -6,6 +6,8 @@
 #include <vector>
 #include <limits>
 #include <ctime>
+#include <cstdlib>
+#include <cstdint>
 
 namespace basic_ds {
 using size_type = std::size_t;
@@ -39,7 +41,7 @@ public:
     using kv_type = std::pair<key_type, value_type>;
 
     explicit SkipList() : h{0} {
-        std::srand(time(nullptr));
+        std::srand(std::time(nullptr));
         head.push_back(new Node(MIN_KEY, value_type{}));
         tail.push_back(new Node(MAX_KEY, value_type{}));
         head[0]->_next = tail[0];

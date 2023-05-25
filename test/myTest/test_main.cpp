@@ -1,4 +1,3 @@
-// #define TEST2
 // #define PROB3
 #include "KVTest.hpp"
 

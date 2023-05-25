@@ -21,8 +21,8 @@ KVStore::KVStore(const std::string &dir)
                 {5, /* uint32_max */}};
 
     // Check the directory and create when necessary
-    if (!utils::dirExists(dir)) {
-        throw std::runtime_error{"No such data directory!"};
+    if (utils::mkdir(dir.c_str())) {
+        throw std::runtime_error{"Cannot create directory " + dir};
     }
 
     std::vector<std::string> dir_list{};
@@ -35,10 +35,9 @@ KVStore::KVStore(const std::string &dir)
         utils::scanDir(dir_path, sst_list);
         for (const auto &sst_name : sst_list) {
             auto cache = sst::read_sst(dir_path + sst_name, level);
-            if (cache.level == -1) {
-                throw std::runtime_error{"Cannot read sst " + dir_path + sst_name};
+            if (cache.level != -1) {
+                caches.push_back(std::move(cache));
             }
-            caches.push_back(std::move(cache));
         }
     }
     std::sort(caches.begin(), caches.end(), std::less<decltype(caches)::value_type>{});
