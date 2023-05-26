@@ -35,6 +35,7 @@ KVStore::KVStore(const std::string &dir)
         utils::scanDir(dir_path, sst_list);
         for (const auto &sst_name : sst_list) {
             auto cache = sst::read_sst(dir_path + sst_name, level);
+            // TODO ignore or exception?
             if (cache.level != -1) {
                 caches.push_back(std::move(cache));
             }

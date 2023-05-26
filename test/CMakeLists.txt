@@ -10,6 +10,7 @@ add_executable(test_bft bloom_filter.cpp)
 add_executable(test_sl skip_list.cpp)
 add_executable(test_mtb memory_table.cpp)
 add_executable(correctness correctness.cc ../src/kvstore.cc)
+add_executable(persistence persistence.cc ../src/kvstore.cc)
 
 add_test(NAME TestBft COMMAND test_bft)
 add_test(NAME TestSkipList COMMAND test_sl)

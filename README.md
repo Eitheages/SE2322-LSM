@@ -1,3 +1,27 @@
+## Build
+
+correctness:
+
+```sh
+g++ -std=c++14 test/correctness.cc src/kvstore.cc -o correctness -O3 -I../include -D NDEBUG
+```
+
+persistence:
+
+```sh
+g++ -std=c++14 test/persistence.cc src/kvstore.cc -o persistence -O3 -I../include -D NDEBUG
+```
+
+Or use cmake:
+
+```sh
+mkdir build
+cd build
+cmake ..
+make # make several test unit simultaneously
+# correctness and persistence are now at build/test/
+```
+
 ## Project LSM-KV: KVStore using Log-structured Merge Tree
 
 
